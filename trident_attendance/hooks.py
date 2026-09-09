@@ -292,6 +292,15 @@ fixtures = [
 	},
 ]
 
+# Every punch is staged on arrival regardless of source (mobile app, ZKTeco sync
+# tool, manual entry, data import). Enforced here so staging does not depend on each
+# client remembering to set the flag.
+doc_events = {
+	"Employee Checkin": {
+		"before_insert": "trident_attendance.checkin_hooks.hold_for_review",
+	},
+}
+
 # Replaces the "Purge Attendance Photos" Server Script. An app hook works on
 # Frappe Cloud, where Server Scripts are typically disabled bench-wide.
 scheduler_events = {
