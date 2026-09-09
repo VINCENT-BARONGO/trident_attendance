@@ -1,0 +1,204 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Attendance Review{% endblock %}
+
+{% block style %}
+<style>
+	.ar-wrap { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+	.ar-head { display: flex; flex-wrap: wrap; gap: 1rem; align-items: baseline; justify-content: space-between; }
+	.ar-date { font-size: 1.05rem; font-weight: 600; }
+	.ar-nav a { text-decoration: none; padding: 0 .4rem; }
+	.ar-sum { color: #6b7280; font-size: .9rem; margin: .35rem 0 1rem; }
+	table.ar { width: 100%; border-collapse: collapse; font-size: .9rem; }
+	table.ar th { text-align: left; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb;
+		padding: .5rem .6rem; white-space: nowrap; }
+	table.ar td { border-bottom: 1px solid #f0f0f0; padding: .5rem .6rem; vertical-align: middle; }
+	.pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+	.pill-in { background: #dcfce7; color: #166534; }
+	.pill-out { background: #fee2e2; color: #991b1b; }
+	.ok { color: #166534; font-weight: 600; }
+	.warn { color: #92400e; font-weight: 600; }
+	.muted { color: #9ca3af; }
+	.ar-scroll { overflow-x: auto; }
+	.ar-actions { margin: 1.25rem 0; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+	#ar-result { font-size: .9rem; }
+	.ar-empty { color: #6b7280; padding: 2rem 0; }
+	.thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 4px; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="ar-wrap">
+
+	<div class="ar-head">
+		<div>
+			<h1 style="margin:0 0 .25rem">Attendance Review</h1>
+			<div class="ar-date">
+				{{ frappe.format(day, {"fieldtype": "Date"}) }}
+				<span class="ar-nav">
+					<a href="/attendance-review?date={{ prev_day }}">&larr;</a>
+					{% if day < today %}<a href="/attendance-review?date={{ next_day }}">&rarr;</a>{% endif %}
+					{% if day != today %}<a href="/attendance-review" style="font-size:.85rem">today</a>{% endif %}
+				</span>
+			</div>
+		</div>
+	</div>
+
+	<div class="ar-sum">
+		{{ rows|length }} check-in{{ "s" if rows|length != 1 }} &middot;
+		<strong>{{ held }} held</strong> for review &middot;
+		{{ ready }} released, awaiting processing &middot;
+		{{ done }} already in Attendance
+	</div>
+
+	{% if can_process %}
+	<div class="ar-actions">
+		<button class="btn btn-default btn-sm" id="ar-release" disabled>Release selected</button>
+		<button class="btn btn-primary btn-sm" id="ar-process">Process into Attendance</button>
+		<span id="ar-result" class="muted"></span>
+	</div>
+	<div class="ar-sum">Held punches are invisible to attendance processing until released.</div>
+	{% else %}
+	<div class="ar-sum warn">You have read access only — releasing and processing require permission to create Attendance.</div>
+	{% endif %}
+
+	<div class="ar-scroll">
+	<table class="ar">
+		<thead>
+			<tr>
+				{% if can_process %}<th style="width:2rem"><input type="checkbox" id="ar-all" title="Select all held"></th>{% endif %}
+				<th>Time</th><th>Employee</th><th>Type</th><th>Project</th>
+				<th>Face</th><th>Score</th><th>Photo</th><th>Status</th>
+			</tr>
+		</thead>
+		<tbody>
+		{% for r in rows %}
+			<tr>
+				{% if can_process %}<td>
+					{% if r.skip_auto_attendance and not r.attendance %}
+						<input type="checkbox" class="ar-pick" value="{{ r.name }}">
+					{% endif %}
+				</td>{% endif %}
+				<td>{{ r.time.strftime("%H:%M:%S") }}</td>
+				<td>{{ r.employee_name }}</td>
+				<td><span class="pill {{ 'pill-in' if r.log_type == 'IN' else 'pill-out' }}">{{ r.log_type }}</span></td>
+				<td>{{ r.custom_site_project or "—" }}</td>
+				<td>
+					{% if r.custom_face_match_result == "Matched" %}<span class="ok">Matched</span>
+					{% elif r.custom_face_match_result %}<span class="warn">{{ r.custom_face_match_result }}</span>
+					{% else %}<span class="muted">—</span>{% endif %}
+				</td>
+				<td>{% if r.custom_face_match_score %}{{ "%.1f"|format(r.custom_face_match_score * 100) }}%{% else %}<span class="muted">—</span>{% endif %}</td>
+				<td>{% if r.custom_attendance_photo %}<img class="thumb" src="{{ r.custom_attendance_photo }}" alt="">{% else %}<span class="muted">—</span>{% endif %}</td>
+				<td>
+					{% if r.attendance %}<a href="/app/attendance/{{ r.attendance }}">{{ r.attendance }}</a>
+					{% elif r.skip_auto_attendance %}<span class="warn">held</span>
+					{% else %}<span class="ok">released</span>{% endif %}
+				</td>
+			</tr>
+		{% else %}
+			<tr><td colspan="{{ 9 if can_process else 8 }}" class="ar-empty">No check-ins recorded on this day.</td></tr>
+		{% endfor %}
+		</tbody>
+	</table>
+	</div>
+
+	{% if attendance %}
+	<h2 style="font-size:1rem;margin:2rem 0 .5rem">Attendance for this day</h2>
+	<div class="ar-scroll">
+	<table class="ar">
+		<thead><tr><th>Employee</th><th>Status</th><th>Hours</th><th>Record</th></tr></thead>
+		<tbody>
+		{% for a in attendance %}
+			<tr>
+				<td>{{ a.employee_name }}</td>
+				<td>{% if a.status == "Present" %}<span class="ok">Present</span>{% else %}<span class="muted">{{ a.status }}</span>{% endif %}</td>
+				<td>{{ a.working_hours or 0 }}</td>
+				<td><a href="/app/attendance/{{ a.name }}">{{ a.name }}</a></td>
+			</tr>
+		{% endfor %}
+		</tbody>
+	</table>
+	</div>
+	{% endif %}
+
+</div>
+
+<script>
+frappe.ready(function () {
+	const btn = document.getElementById("ar-process");
+	if (!btn) return;
+	const out = document.getElementById("ar-result");
+	const relBtn = document.getElementById("ar-release");
+	const picks = () => Array.from(document.querySelectorAll(".ar-pick:checked")).map(c => c.value);
+
+	function syncRelease() {
+		const n = picks().length;
+		relBtn.disabled = n === 0;
+		relBtn.textContent = n ? `Release ${n} selected` : "Release selected";
+	}
+
+	document.querySelectorAll(".ar-pick").forEach(c => c.addEventListener("change", syncRelease));
+	const all = document.getElementById("ar-all");
+	if (all) {
+		all.addEventListener("change", function () {
+			document.querySelectorAll(".ar-pick").forEach(c => { c.checked = all.checked; });
+			syncRelease();
+		});
+	}
+
+	relBtn.addEventListener("click", function () {
+		const names = picks();
+		if (!names.length) return;
+		relBtn.disabled = true;
+		out.className = "muted";
+		out.textContent = "Releasing…";
+		frappe.call({
+			method: "trident_attendance.api.release_checkins",
+			args: { names: JSON.stringify(names) },
+			callback: function (r) {
+				const m = r.message || {};
+				out.className = m.ok ? "ok" : "warn";
+				out.textContent = m.ok
+					? m.released + " check-in(s) released. Reloading…"
+					: (m.message || "Nothing released.");
+				if (m.ok) setTimeout(() => window.location.reload(), 800);
+				else relBtn.disabled = false;
+			},
+			error: function () {
+				out.className = "warn";
+				out.textContent = "Release failed — see the browser console.";
+				relBtn.disabled = false;
+			},
+		});
+	});
+
+	btn.addEventListener("click", function () {
+		btn.disabled = true;
+		out.className = "muted";
+		out.textContent = "Processing…";
+
+		frappe.call({
+			method: "trident_attendance.api.process_attendance",
+			callback: function (r) {
+				const m = r.message || {};
+				if (!m.ok) {
+					out.className = "warn";
+					out.textContent = m.message || "Nothing to process.";
+					btn.disabled = false;
+					return;
+				}
+				out.className = "ok";
+				out.textContent = m.created + " Attendance record(s) created. Reloading…";
+				setTimeout(function () { window.location.reload(); }, 900);
+			},
+			error: function () {
+				out.className = "warn";
+				out.textContent = "Failed — see the browser console.";
+				btn.disabled = false;
+			},
+		});
+	});
+});
+</script>
+{% endblock %}

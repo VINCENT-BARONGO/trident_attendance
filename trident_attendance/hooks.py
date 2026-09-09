@@ -281,6 +281,15 @@ fixtures = [
 		"dt": "Custom DocPerm",
 		"filters": [["role", "in", ["Attendance Marking", "Attendance Admin"]]],
 	},
+	# Sidebar entry for the review page. NOTE its `module` is HR, not this app:
+	# a workspace is only visible to users holding doctype permissions in its module,
+	# and this app owns no doctypes, so "Trident Attendance" would hide it from
+	# everyone except Workspace Managers -- silently, as Frappe swallows the
+	# PermissionError. Do not "correct" it to the app's own module.
+	{
+		"dt": "Workspace",
+		"filters": [["name", "in", ["Field Attendance"]]],
+	},
 ]
 
 # Replaces the "Purge Attendance Photos" Server Script. An app hook works on
