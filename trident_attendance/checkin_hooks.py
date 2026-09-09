@@ -9,6 +9,7 @@ which never retries it, so a doubtful punch is held with a reason instead.
 """
 
 from trident_attendance.checkin_rules import (
+	DAY_PREFIXES,
 	FACE_PREFIX,
 	evaluate_face,
 	evaluate_instant,
@@ -41,6 +42,9 @@ def validate(doc, method=None):
 
 	if doc.custom_review_status != STATUS_PENDING:
 		return
+	if doc.has_value_changed("time") or doc.has_value_changed("log_type"):
+		# Day-level reasons (pairing, supervisor order) are stale now; the next evaluation rebuilds them.
+		doc.custom_hold_reasons = join_reasons(strip_prefixes(split_reasons(doc.custom_hold_reasons), DAY_PREFIXES))
 	if doc.has_value_changed("custom_site_project"):
 		doc.custom_hold_reasons = refresh_project_reasons(doc, settings)
 	if doc.has_value_changed("custom_face_match_result"):

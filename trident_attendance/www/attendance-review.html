@@ -1,94 +1,81 @@
 {% extends "templates/web.html" %}
 
 {% block title %}Attendance Review{% endblock %}
+{% block navbar %}{% endblock %}
+{% block footer %}{% endblock %}
 
 {% block style %}
 <style>
-	:root {
-		--ar-bg: #ffffff;
-		--ar-surface: #f9fafb;
-		--ar-border: #e5e7eb;
-		--ar-border-soft: #f0f0f0;
-		--ar-text: #111827;
-		--ar-muted: #6b7280;
-		--ar-faint: #9ca3af;
-		--ar-ok: #166534;
-		--ar-ok-bg: #dcfce7;
-		--ar-warn: #92400e;
-		--ar-warn-bg: #fef3c7;
-		--ar-bad: #991b1b;
-		--ar-bad-bg: #fee2e2;
-		--ar-info: #1e40af;
-		--ar-info-bg: #dbeafe;
-		--ar-chip-bg: #f3f4f6;
-		--ar-chip-text: #374151;
+	/* Tokens follow the page Frappe actually rendered (measured at runtime), plus its data-theme. */
+	.ar-wrap {
+		--ar-bg: #ffffff; --ar-surface: #f6f7f9; --ar-surface-2: #eef0f3; --ar-border: #e3e6ea; --ar-border-soft: #eff1f4;
+		--ar-text: #1f2937; --ar-muted: #6b7280; --ar-faint: #9ca3af; --ar-link: #1d4ed8;
+		--ar-ok: #166534; --ar-ok-bg: #dcfce7; --ar-warn: #92400e; --ar-warn-bg: #fef3c7;
+		--ar-bad: #991b1b; --ar-bad-bg: #fee2e2; --ar-info: #1e40af; --ar-info-bg: #dbeafe;
+		--ar-chip-bg: #f3f4f6; --ar-chip-text: #374151; --ar-primary: #2563eb; --ar-primary-text: #ffffff;
 	}
-	@media (prefers-color-scheme: dark) {
-		:root:not([data-theme="light"]) {
-			--ar-bg: #111827;
-			--ar-surface: #1f2937;
-			--ar-border: #374151;
-			--ar-border-soft: #273449;
-			--ar-text: #f3f4f6;
-			--ar-muted: #9ca3af;
-			--ar-faint: #6b7280;
-			--ar-ok: #86efac;
-			--ar-ok-bg: #14532d;
-			--ar-warn: #fcd34d;
-			--ar-warn-bg: #78350f;
-			--ar-bad: #fca5a5;
-			--ar-bad-bg: #7f1d1d;
-			--ar-info: #93c5fd;
-			--ar-info-bg: #1e3a8a;
-			--ar-chip-bg: #374151;
-			--ar-chip-text: #e5e7eb;
-		}
-	}
-	:root[data-theme="dark"] {
-		--ar-bg: #111827;
-		--ar-surface: #1f2937;
-		--ar-border: #374151;
-		--ar-border-soft: #273449;
-		--ar-text: #f3f4f6;
-		--ar-muted: #9ca3af;
-		--ar-faint: #6b7280;
-		--ar-ok: #86efac;
-		--ar-ok-bg: #14532d;
-		--ar-warn: #fcd34d;
-		--ar-warn-bg: #78350f;
-		--ar-bad: #fca5a5;
-		--ar-bad-bg: #7f1d1d;
-		--ar-info: #93c5fd;
-		--ar-info-bg: #1e3a8a;
-		--ar-chip-bg: #374151;
-		--ar-chip-text: #e5e7eb;
+	.ar-wrap[data-ar-theme="dark"], [data-theme="dark"] .ar-wrap {
+		--ar-bg: #161b22; --ar-surface: #1f2630; --ar-surface-2: #273140; --ar-border: #343d4b; --ar-border-soft: #2a3341;
+		--ar-text: #e6e8eb; --ar-muted: #9aa3ad; --ar-faint: #6b7280; --ar-link: #8ab4f8;
+		--ar-ok: #86efac; --ar-ok-bg: #14532d; --ar-warn: #fcd34d; --ar-warn-bg: #5b3a0a;
+		--ar-bad: #fca5a5; --ar-bad-bg: #6b1d1d; --ar-info: #93c5fd; --ar-info-bg: #1e3a8a;
+		--ar-chip-bg: #2b3442; --ar-chip-text: #d5dae1; --ar-primary: #3b82f6; --ar-primary-text: #ffffff;
 	}
 
-	.ar-wrap { max-width: 1180px; margin: 0 auto; padding: 1.5rem 1rem 4rem; color: var(--ar-text); }
-	.ar-head { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; justify-content: space-between; }
-	.ar-head h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
-	.ar-date { font-size: 1.05rem; font-weight: 600; }
-	.ar-nav a { text-decoration: none; padding: 0 .4rem; color: var(--ar-info); }
-	.ar-filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-	.ar-filters select, .ar-filters input { background: var(--ar-bg); color: var(--ar-text); border: 1px solid var(--ar-border); border-radius: 6px; padding: .3rem .5rem; font-size: .85rem; }
-	.ar-sum { color: var(--ar-muted); font-size: .9rem; margin: .5rem 0 1rem; display: flex; flex-wrap: wrap; gap: .4rem .9rem; }
-	.ar-banner { border: 1px solid var(--ar-border); background: var(--ar-surface); border-radius: 8px; padding: .6rem .9rem; font-size: .9rem; margin: .75rem 0 1rem; }
-	.ar-banner.info { border-color: var(--ar-info); background: var(--ar-info-bg); color: var(--ar-info); }
-	.ar-banner.warn { border-color: var(--ar-warn); background: var(--ar-warn-bg); color: var(--ar-warn); }
-	.ar-actions { margin: .5rem 0 1.25rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-	.ar-actions select { background: var(--ar-bg); color: var(--ar-text); border: 1px solid var(--ar-border); border-radius: 6px; padding: .3rem .5rem; font-size: .85rem; max-width: 260px; }
-	#ar-result { font-size: .9rem; width: 100%; }
-	.ar-group { border: 1px solid var(--ar-border); border-radius: 10px; margin-bottom: .9rem; background: var(--ar-bg); overflow: hidden; }
-	.ar-ghead { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; padding: .6rem .9rem; background: var(--ar-surface); border-bottom: 1px solid var(--ar-border); }
-	.ar-gname { font-weight: 600; }
-	.ar-gmeta { color: var(--ar-muted); font-size: .85rem; }
-	.ar-gactions { margin-left: auto; display: flex; gap: .4rem; flex-wrap: wrap; }
-	.ar-chips { display: flex; flex-wrap: wrap; gap: .3rem; padding: .4rem .9rem 0; }
-	table.ar { width: 100%; border-collapse: collapse; font-size: .88rem; }
-	table.ar th { text-align: left; font-weight: 600; color: var(--ar-muted); border-bottom: 1px solid var(--ar-border); padding: .45rem .6rem; white-space: nowrap; }
-	table.ar td { border-bottom: 1px solid var(--ar-border-soft); padding: .45rem .6rem; vertical-align: middle; }
-	table.ar tr:last-child td { border-bottom: 0; }
-	.pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+	.ar-wrap { max-width: 1240px; margin: 0 auto; padding: 1rem 1rem 6rem; color: var(--ar-text); font-size: 14px; }
+	.ar-wrap a { color: var(--ar-link); }
+	.ar-wrap button, .ar-wrap select, .ar-wrap input[type=text] { font: inherit; }
+	.ar-btn { border: 1px solid var(--ar-border); background: var(--ar-surface); color: var(--ar-text); border-radius: 6px; padding: .3rem .7rem; font-size: .85rem; cursor: pointer; line-height: 1.3; white-space: nowrap; }
+	.ar-btn:hover { background: var(--ar-surface-2); }
+	.ar-btn:disabled { opacity: .45; cursor: default; }
+	.ar-btn.primary { background: var(--ar-primary); border-color: var(--ar-primary); color: var(--ar-primary-text); }
+	.ar-btn.primary:hover { filter: brightness(1.08); }
+	.ar-btn.xs { padding: .15rem .5rem; font-size: .78rem; }
+	.ar-select { background: var(--ar-bg); color: var(--ar-text); border: 1px solid var(--ar-border); border-radius: 6px; padding: .3rem .5rem; font-size: .85rem; max-width: 220px; }
+
+	.ar-top { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; margin-bottom: .75rem; }
+	.ar-top h1 { margin: 0; font-size: 1.35rem; }
+	.ar-tabs { display: flex; gap: .25rem; border: 1px solid var(--ar-border); border-radius: 8px; padding: .15rem; background: var(--ar-surface); }
+	.ar-tabs a { padding: .3rem .8rem; border-radius: 6px; text-decoration: none; color: var(--ar-muted); font-size: .85rem; }
+	.ar-tabs a.on { background: var(--ar-bg); color: var(--ar-text); box-shadow: 0 1px 2px rgba(0,0,0,.08); font-weight: 600; }
+	.ar-desk { margin-left: auto; font-size: .85rem; }
+	.ar-filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+	.ar-daynav { display: flex; align-items: center; gap: .3rem; font-weight: 600; }
+	.ar-daynav a { text-decoration: none; padding: .1rem .45rem; border: 1px solid var(--ar-border); border-radius: 6px; }
+
+	.ar-summary { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; color: var(--ar-muted); font-size: .88rem; margin: .25rem 0 .75rem; }
+	.ar-banner { border: 1px solid var(--ar-border); background: var(--ar-surface); border-radius: 8px; padding: .55rem .9rem; font-size: .88rem; margin: 0 0 1rem; }
+	.ar-banner.info { border-color: transparent; background: var(--ar-info-bg); color: var(--ar-info); }
+	.ar-banner.warn { border-color: transparent; background: var(--ar-warn-bg); color: var(--ar-warn); }
+
+	.ar-bulk { position: sticky; top: 0; z-index: 5; display: none; gap: .5rem; align-items: center; flex-wrap: wrap; padding: .5rem .75rem; margin: 0 0 .75rem; border: 1px solid var(--ar-border); border-radius: 8px; background: var(--ar-surface); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+	.ar-bulk.on { display: flex; }
+	#ar-result { font-size: .85rem; margin: .25rem 0 .75rem; min-height: 1.2em; }
+
+	.ar-dayhead { display: flex; align-items: baseline; gap: .6rem; margin: 1.25rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--ar-border); }
+	.ar-dayhead h2 { font-size: 1rem; margin: 0; }
+	.ar-dayhead .muted { font-size: .85rem; }
+
+	.ar-card { border: 1px solid var(--ar-border); border-radius: 10px; margin-bottom: .6rem; background: var(--ar-bg); overflow: hidden; }
+	.ar-card.pending { border-left: 4px solid var(--ar-warn); }
+	.ar-card.marked { border-left: 4px solid var(--ar-ok); }
+	.ar-card.rejected { border-left: 4px solid var(--ar-bad); opacity: .8; }
+	.ar-card.released { border-left: 4px solid var(--ar-info); }
+	.ar-chead { display: grid; grid-template-columns: auto 1fr auto; gap: .5rem 1rem; align-items: center; padding: .55rem .8rem; background: var(--ar-surface); }
+	.ar-who { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: baseline; }
+	.ar-who .name { font-weight: 600; font-size: .95rem; }
+	.ar-who .id { color: var(--ar-faint); font-size: .8rem; }
+	.ar-times { display: flex; flex-wrap: wrap; gap: .3rem .9rem; color: var(--ar-muted); font-size: .85rem; }
+	.ar-times b { color: var(--ar-text); font-weight: 600; }
+	.ar-cactions { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
+	.ar-chips { display: flex; flex-wrap: wrap; gap: .3rem; padding: .45rem .8rem 0; }
+	.chip { display: inline-flex; align-items: center; gap: .3rem; padding: .12rem .55rem; border-radius: 6px; font-size: .76rem; background: var(--ar-chip-bg); color: var(--ar-chip-text); border: 1px solid var(--ar-border); cursor: help; }
+	.chip.block { background: var(--ar-warn-bg); color: var(--ar-warn); border-color: transparent; font-weight: 600; }
+
+	table.ar { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .35rem; }
+	table.ar th { text-align: left; font-weight: 600; color: var(--ar-muted); padding: .3rem .8rem; white-space: nowrap; font-size: .76rem; text-transform: uppercase; letter-spacing: .02em; }
+	table.ar td { border-top: 1px solid var(--ar-border-soft); padding: .35rem .8rem; vertical-align: middle; }
+	.pill { display: inline-block; padding: .08rem .5rem; border-radius: 999px; font-size: .74rem; font-weight: 600; white-space: nowrap; }
 	.pill-in { background: var(--ar-ok-bg); color: var(--ar-ok); }
 	.pill-out { background: var(--ar-bad-bg); color: var(--ar-bad); }
 	.pill-state { background: var(--ar-chip-bg); color: var(--ar-chip-text); }
@@ -96,228 +83,283 @@
 	.pill-state.marked { background: var(--ar-ok-bg); color: var(--ar-ok); }
 	.pill-state.rejected { background: var(--ar-bad-bg); color: var(--ar-bad); }
 	.pill-state.released { background: var(--ar-info-bg); color: var(--ar-info); }
-	.chip { display: inline-block; padding: .1rem .5rem; border-radius: 6px; font-size: .75rem; background: var(--ar-chip-bg); color: var(--ar-chip-text); border: 1px solid var(--ar-border); }
-	.chip.block { background: var(--ar-warn-bg); color: var(--ar-warn); border-color: transparent; }
 	.ok { color: var(--ar-ok); font-weight: 600; }
 	.warn { color: var(--ar-warn); font-weight: 600; }
 	.bad { color: var(--ar-bad); font-weight: 600; }
 	.muted { color: var(--ar-faint); }
 	.ar-scroll { overflow-x: auto; }
-	.ar-empty { color: var(--ar-muted); padding: 2rem 0; }
-	.thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 4px; border: 1px solid var(--ar-border); background: var(--ar-surface); }
-	.ar-wrap a { color: var(--ar-info); }
-	.btn-xs { padding: .15rem .5rem; font-size: .75rem; line-height: 1.4; }
-	h2.ar-h2 { font-size: 1rem; margin: 2rem 0 .5rem; }
+	.ar-empty { color: var(--ar-muted); padding: 2.5rem 1rem; text-align: center; border: 1px dashed var(--ar-border); border-radius: 10px; }
+	.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--ar-border); background: var(--ar-surface); vertical-align: middle; }
+	details.ar-details { margin-top: 1.5rem; }
+	details.ar-details summary { cursor: pointer; font-weight: 600; font-size: .95rem; }
+	@media (max-width: 720px) {
+		.ar-chead { grid-template-columns: auto 1fr; }
+		.ar-cactions { grid-column: 1 / -1; justify-content: flex-start; }
+		table.ar th:nth-child(6), table.ar td:nth-child(6), table.ar th:nth-child(7), table.ar td:nth-child(7) { display: none; }
+	}
 </style>
 {% endblock %}
 
 {% block page_content %}
-<div class="ar-wrap">
+{% set qs = "&project=" ~ project_filter ~ "&supervisor=" ~ supervisor_filter %}
+<div class="ar-wrap" id="ar-wrap">
 
-	<div class="ar-head">
-		<div>
-			<h1>Attendance Review</h1>
-			<div class="ar-date">
-				{{ frappe.format(day, {"fieldtype": "Date"}) }}
-				<span class="ar-nav">
-					<a href="/attendance-review?date={{ prev_day }}&status={{ status_filter }}&project={{ project_filter }}&supervisor={{ supervisor_filter }}">&larr;</a>
-					{% if day < today %}<a href="/attendance-review?date={{ next_day }}&status={{ status_filter }}&project={{ project_filter }}&supervisor={{ supervisor_filter }}">&rarr;</a>{% endif %}
-					{% if day != today %}<a href="/attendance-review?status={{ status_filter }}" style="font-size:.85rem">today</a>{% endif %}
-				</span>
-			</div>
-		</div>
-		<form class="ar-filters" method="get" action="/attendance-review">
+	<div class="ar-top">
+		<h1>Attendance Review</h1>
+		<nav class="ar-tabs">
+			<a class="{{ 'on' if view == 'queue' }}" href="/attendance-review?view=queue{{ qs }}">To review{% if view != 'queue' %}{% else %} · {{ pending_groups }}{% endif %}</a>
+			<a class="{{ 'on' if view == 'day' }}" href="/attendance-review?view=day&date={{ day }}{{ qs }}">By day</a>
+		</nav>
+		<a class="ar-desk" href="/app/field-attendance">Back to Desk &rarr;</a>
+	</div>
+
+	<form class="ar-filters" method="get" action="/attendance-review">
+		<input type="hidden" name="view" value="{{ view }}">
+		{% if view == "day" %}
 			<input type="hidden" name="date" value="{{ day }}">
-			<select name="status" title="Review status">
+			<span class="ar-daynav">
+				<a href="/attendance-review?view=day&date={{ prev_day }}&status={{ status_filter }}{{ qs }}" title="Previous day">&larr;</a>
+				<span>{{ frappe.format(day, {"fieldtype": "Date"}) }} <span class="muted" style="font-weight:400">{{ day.strftime("%A") }}</span></span>
+				{% if day < today %}<a href="/attendance-review?view=day&date={{ next_day }}&status={{ status_filter }}{{ qs }}" title="Next day">&rarr;</a>{% endif %}
+				{% if day != today %}<a href="/attendance-review?view=day&status={{ status_filter }}{{ qs }}" style="font-size:.8rem">today</a>{% endif %}
+			</span>
+			<select class="ar-select" name="status" title="Review status">
 				{% for s in status_filters %}<option value="{{ s }}" {{ "selected" if s == status_filter }}>{{ s }}</option>{% endfor %}
 			</select>
-			<select name="project" title="Project">
-				<option value="">All projects</option>
-				{% for p in projects %}<option value="{{ p.name }}" {{ "selected" if p.name == project_filter }}>{{ p.project_name or p.name }}</option>{% endfor %}
-			</select>
-			<select name="supervisor" title="Posted by">
-				<option value="">All supervisors</option>
-				{% for u in supervisors %}<option value="{{ u }}" {{ "selected" if u == supervisor_filter }}>{{ u }}</option>{% endfor %}
-			</select>
-			<button class="btn btn-default btn-sm" type="submit">Filter</button>
-		</form>
-	</div>
+		{% endif %}
+		<select class="ar-select" name="project" title="Project">
+			<option value="">All projects</option>
+			{% for p in projects %}<option value="{{ p.name }}" {{ "selected" if p.name == project_filter }}>{{ p.project_name or p.name }}</option>{% endfor %}
+		</select>
+		<select class="ar-select" name="supervisor" title="Posted by">
+			<option value="">All supervisors</option>
+			{% for u in supervisors %}<option value="{{ u }}" {{ "selected" if u == supervisor_filter }}>{{ u }}</option>{% endfor %}
+		</select>
+		<button class="ar-btn" type="submit">Apply</button>
+		{% if can_process %}
+			<span style="flex:1"></span>
+			<label style="font-size:.82rem;margin:0;color:var(--ar-muted)"><input type="checkbox" id="ar-include-today"> include today</label>
+			<button class="ar-btn" type="button" id="ar-process" title="Evaluate every complete day now instead of waiting for the hourly job">Run processing</button>
+		{% endif %}
+	</form>
 
-	<div class="ar-sum">
-		<span>{{ total }} check-in{{ "s" if total != 1 }} on this day</span>
-		<span><strong class="warn">{{ counts["Pending Review"] }} pending</strong></span>
-		<span>{{ counts["Auto-Released"] + counts["Released"] }} released</span>
-		<span class="ok">{{ counts["Marked"] }} marked</span>
-		<span class="muted">{{ counts["Rejected"] }} rejected</span>
-		{% if shown != total %}<span class="muted">(showing {{ shown }})</span>{% endif %}
-	</div>
-
-	{% if day_complete %}
-	<div class="ar-banner info">
-		This day is complete. {% if auto_release %}Clean days are marked automatically every hour; only held days need you.{% else %}Automatic release is off in Trident Attendance Settings — every day needs a reviewer.{% endif %}
-	</div>
+	{% if view == "queue" %}
+		<div class="ar-summary">
+			<span><strong class="warn">{{ pending_groups }}</strong> employee-day{{ "s" if pending_groups != 1 }} waiting for review (last {{ queue_days }} days)</span>
+			<span>· complete up to {{ frappe.format(complete_up_to, {"fieldtype": "Date"}) }}; today counts after {{ cutoff }}</span>
+			{% if not auto_release %}<span class="warn">· automatic release is off</span>{% endif %}
+		</div>
 	{% else %}
-	<div class="ar-banner warn">
-		Today's check-ins are still coming in. They are treated as complete after {{ cutoff }}; you can force it with "Process now" (include today).
-	</div>
+		{% if day_complete %}
+			<div class="ar-banner info">This day is complete. {% if auto_release %}Clean days are marked automatically every hour; only held days need you.{% else %}Automatic release is off — every day needs a reviewer.{% endif %}</div>
+		{% else %}
+			<div class="ar-banner warn">Today's check-ins are still coming in. They are treated as complete after {{ cutoff }}, or when you run processing with "include today".</div>
+		{% endif %}
 	{% endif %}
 
 	{% if can_process %}
-	<div class="ar-actions">
-		<button class="btn btn-primary btn-sm" id="ar-release" disabled>Release &amp; mark selected</button>
-		<button class="btn btn-default btn-sm" id="ar-reject" disabled>Reject selected</button>
-		<select id="ar-project-select">
-			<option value="">Move selected to project…</option>
+	<div class="ar-bulk" id="ar-bulk">
+		<span id="ar-count" style="font-size:.85rem"></span>
+		<button class="ar-btn primary" id="ar-release">Release &amp; mark</button>
+		<button class="ar-btn" id="ar-reject">Reject</button>
+		<select class="ar-select" id="ar-project-select">
+			<option value="">Move to project…</option>
 			{% for p in projects %}<option value="{{ p.name }}">{{ p.project_name or p.name }} ({{ p.name }})</option>{% endfor %}
 		</select>
-		<button class="btn btn-default btn-sm" id="ar-set-project" disabled>Apply</button>
-		<span style="flex:1"></span>
-		<label style="font-size:.85rem;margin:0"><input type="checkbox" id="ar-include-today"> include today</label>
-		<button class="btn btn-default btn-sm" id="ar-process">Process now</button>
-		<span id="ar-result" class="muted"></span>
+		<button class="ar-btn" id="ar-set-project" disabled>Move</button>
+		<button class="ar-btn" id="ar-clear" style="margin-left:auto">Clear selection</button>
 	</div>
 	{% else %}
 	<div class="ar-banner">You have read access only — releasing, rejecting and processing need the Attendance Admin role.</div>
 	{% endif %}
+	<div id="ar-result" class="muted"></div>
 
-	{% if not groups %}
-		<div class="ar-empty">No {{ status_filter.lower() if status_filter != "All" else "" }} check-ins match on this day.</div>
+	{% if not days %}
+		<div class="ar-empty">
+			{% if view == "queue" %}Nothing to review. Clean days are marked automatically; held days will appear here.{% else %}No {{ status_filter.lower() if status_filter != "All" else "" }} check-ins on this day.{% endif %}
+		</div>
 	{% endif %}
 
-	{% for g in groups %}
-	<div class="ar-group" data-employee="{{ g.employee }}">
-		<div class="ar-ghead">
-			{% if can_process and g.pending_names %}
-				<input type="checkbox" class="ar-pick-group" title="Select all pending for {{ g.employee_name }}">
-			{% endif %}
-			<span class="ar-gname">{{ g.employee_name }} <span class="muted" style="font-weight:400">{{ g.employee }}</span></span>
-			<span class="pill pill-state {{ g.state.lower() }}">{{ g.state }}</span>
-			<span class="ar-gmeta">
-				{% if g.projects %}{{ g.projects|join(", ") }}{% else %}<span class="muted">no project</span>{% endif %}
-				&middot; {% if g.first_in %}IN {{ g.first_in.time_str[:5] }}{% else %}<span class="bad">no IN</span>{% endif %}
-				&middot; {% if g.last_out %}OUT {{ g.last_out.time_str[:5] }}{% else %}<span class="warn">no OUT</span>{% endif %}
-				{% if g.hours is not none %}&middot; {{ g.hours }} h{% endif %}
-				{% if g.supervisors %}&middot; by {{ g.supervisors|join(", ") }}{% endif %}
-			</span>
-			<span class="ar-gactions">
-				{% if g.attendance %}<a class="btn btn-default btn-xs" href="/app/attendance/{{ g.attendance }}">{{ g.attendance }}</a>{% endif %}
-				{% if can_process %}
-					{% if g.missing_out and g.add_out_ref and g.state == "Pending" %}
-						<button class="btn btn-default btn-xs ar-add-out" data-ref="{{ g.add_out_ref }}" data-name="{{ g.employee_name }}">Add OUT</button>
-					{% endif %}
-					{% if g.existing_attendance %}
-						<button class="btn btn-default btn-xs ar-remark" data-att="{{ g.existing_attendance }}" data-name="{{ g.employee_name }}">Cancel &amp; re-mark</button>
-					{% endif %}
-				{% endif %}
-			</span>
-		</div>
-		{% if g.reasons %}
-		<div class="ar-chips">
-			{% for reason in g.reasons %}<span class="chip {{ 'block' if not reason.startswith('Mixed projects') }}">{{ reason }}</span>{% endfor %}
+	{% for d in days %}
+		{% if view == "queue" or days|length > 1 %}
+		<div class="ar-dayhead">
+			<h2>{{ d.label }}</h2><span class="muted">{{ d.weekday }} · {{ d.pending }} to review</span>
+			<a class="muted" style="margin-left:auto;font-size:.8rem" href="/attendance-review?view=day&date={{ d.date }}{{ qs }}">open day</a>
 		</div>
 		{% endif %}
+
+		{% for g in d.groups %}
+		<div class="ar-card {{ g.state.lower() }}" data-employee="{{ g.employee }}" data-date="{{ g.date }}">
+			<div class="ar-chead">
+				<div>
+					{% if can_process and g.pending_names %}<input type="checkbox" class="ar-pick-group" title="Select this day">{% else %}<span style="display:inline-block;width:13px"></span>{% endif %}
+				</div>
+				<div>
+					<div class="ar-who">
+						<span class="name">{{ g.employee_name }}</span>
+						<span class="id">{{ g.employee }}</span>
+						<span class="pill pill-state {{ g.state.lower() }}">{{ g.state }}</span>
+					</div>
+					<div class="ar-times">
+						<span>{% if g.projects %}<b>{{ g.projects|join(", ") }}</b>{% else %}<span class="bad">no project</span>{% endif %}</span>
+						<span>IN {% if g.first_in %}<b>{{ g.first_in.time_str }}</b>{% else %}<span class="bad">—</span>{% endif %}</span>
+						<span>OUT {% if g.last_out %}<b>{{ g.last_out.time_str }}</b>{% else %}<span class="warn">—</span>{% endif %}</span>
+						{% if g.hours is not none %}<span><b>{{ g.hours }}</b> h</span>{% endif %}
+						{% if g.supervisors %}<span>by {{ g.supervisors|join(", ") }}</span>{% elif g.owners %}<span>posted by {{ g.owners|join(", ") }}</span>{% endif %}
+					</div>
+				</div>
+				<div class="ar-cactions">
+					{% if g.attendance %}<a class="ar-btn xs" href="/app/attendance/{{ g.attendance }}">{{ g.attendance }}</a>{% endif %}
+					{% if can_process %}
+						{% if g.missing_out and g.add_out_ref and g.state == "Pending" %}
+							<button class="ar-btn xs ar-add-out" data-ref="{{ g.add_out_ref }}" data-name="{{ g.employee_name }}">Add OUT</button>
+						{% endif %}
+						{% if g.existing_attendance %}
+							<button class="ar-btn xs ar-remark" data-att="{{ g.existing_attendance }}" data-name="{{ g.employee_name }}">Cancel &amp; re-mark</button>
+						{% endif %}
+						{% if g.state == "Pending" and g.pending_names %}
+							<button class="ar-btn xs ar-reject-one" data-names='{{ g.pending_names|tojson }}' data-name="{{ g.employee_name }}">Reject</button>
+							{% if not g.missing_out %}
+							<button class="ar-btn xs primary ar-release-one" data-names='{{ g.pending_names|tojson }}' data-name="{{ g.employee_name }}">Release &amp; mark</button>
+							{% endif %}
+						{% endif %}
+					{% endif %}
+				</div>
+			</div>
+			{% if g.reasons %}
+			<div class="ar-chips">
+				{% for r in g.reasons %}<span class="chip {{ 'block' if r.blocking }}" title="{{ r.hint }}">{{ r.text }}</span>{% endfor %}
+			</div>
+			{% endif %}
+			<div class="ar-scroll">
+			<table class="ar">
+				<thead>
+					<tr>
+						{% if can_process %}<th style="width:1.5rem"></th>{% endif %}
+						<th>Time</th><th>Type</th><th>Project</th><th>Face</th><th>Distance</th><th>Photo</th><th>Status</th>
+					</tr>
+				</thead>
+				<tbody>
+				{% for r in g.punches %}
+					<tr>
+						{% if can_process %}<td>{% if r.is_pending %}<input type="checkbox" class="ar-pick" value="{{ r.name }}" data-employee="{{ g.employee }}" data-date="{{ g.date }}">{% endif %}</td>{% endif %}
+						<td><a href="/app/employee-checkin/{{ r.name }}" title="{{ r.name }}">{{ r.time_str }}</a></td>
+						<td><span class="pill {{ 'pill-in' if r.log_type == 'IN' else 'pill-out' }}">{{ r.log_type or "—" }}</span></td>
+						<td>{{ r.custom_site_project or "—" }}</td>
+						<td>
+							{% if r.custom_face_match_result == "Matched" %}<span class="ok">Matched</span>
+							{% elif r.custom_face_match_result == "No Match" %}<span class="bad">No Match</span>
+							{% elif r.custom_face_match_result %}<span class="warn">{{ r.custom_face_match_result }}</span>
+							{% else %}<span class="muted">—</span>{% endif %}
+							{% if r.custom_face_match_score %}<span class="muted"> {{ "%.0f"|format(r.custom_face_match_score * 100) }}%</span>{% endif %}
+						</td>
+						<td>{% if r.custom_distance_from_site is not none %}{{ "%.0f"|format(r.custom_distance_from_site) }} m{% else %}<span class="muted">—</span>{% endif %}</td>
+						<td>{% if r.custom_attendance_photo %}<a href="{{ r.custom_attendance_photo }}" target="_blank" rel="noopener"><img class="thumb" src="{{ r.custom_attendance_photo }}" alt="" onerror="this.parentNode.replaceWith(document.createTextNode('—'))"></a>{% else %}<span class="muted">—</span>{% endif %}</td>
+						<td>
+							{% if r.attendance %}<a href="/app/attendance/{{ r.attendance }}">Marked</a>
+							{% elif r.custom_review_status == "Pending Review" %}<span class="warn">Pending</span>
+							{% elif r.custom_review_status == "Rejected" %}<span class="bad">Rejected</span>
+							{% else %}<span class="ok">{{ r.custom_review_status }}</span>{% endif %}
+							{% if r.custom_reviewed_by %}<span class="muted" title="{{ r.custom_reviewed_on }}"> · {{ r.custom_reviewed_by.split('@')[0] }}</span>{% endif %}
+						</td>
+					</tr>
+				{% endfor %}
+				</tbody>
+			</table>
+			</div>
+		</div>
+		{% endfor %}
+	{% endfor %}
+
+	{% if view == "day" and attendance %}
+	<details class="ar-details" {{ "open" if attendance_present }}>
+		<summary>Attendance for this day <span class="muted" style="font-weight:400">— {{ attendance_present|length }} marked{% if attendance_leave %}, {{ attendance_leave|length }} on leave{% endif %}</span></summary>
 		<div class="ar-scroll">
 		<table class="ar">
-			<thead>
-				<tr>
-					{% if can_process %}<th style="width:2rem"></th>{% endif %}
-					<th>Time</th><th>Type</th><th>Project</th><th>Face</th><th>Score</th><th>Distance</th><th>Photo</th><th>Status</th><th>Reviewed</th>
-				</tr>
-			</thead>
+			<thead><tr><th>Employee</th><th>Status</th><th>Project</th><th>In</th><th>Out</th><th>Hours</th><th>Record</th></tr></thead>
 			<tbody>
-			{% for r in g.punches %}
+			{% for a in attendance_present %}
 				<tr>
-					{% if can_process %}<td>
-						{% if r.is_pending %}<input type="checkbox" class="ar-pick" value="{{ r.name }}" data-employee="{{ g.employee }}">{% endif %}
-					</td>{% endif %}
-					<td><a href="/app/employee-checkin/{{ r.name }}">{{ r.time_str }}</a></td>
-					<td><span class="pill {{ 'pill-in' if r.log_type == 'IN' else 'pill-out' }}">{{ r.log_type or "—" }}</span></td>
-					<td>{{ r.custom_site_project or "—" }}</td>
-					<td>
-						{% if r.custom_face_match_result == "Matched" %}<span class="ok">Matched</span>
-						{% elif r.custom_face_match_result == "No Match" %}<span class="bad">No Match</span>
-						{% elif r.custom_face_match_result %}<span class="warn">{{ r.custom_face_match_result }}</span>
-						{% else %}<span class="muted">—</span>{% endif %}
-					</td>
-					<td>{% if r.custom_face_match_score %}{{ "%.0f"|format(r.custom_face_match_score * 100) }}%{% else %}<span class="muted">—</span>{% endif %}</td>
-					<td>{% if r.custom_distance_from_site is not none %}{{ "%.0f"|format(r.custom_distance_from_site) }} m{% else %}<span class="muted">—</span>{% endif %}</td>
-					<td>{% if r.custom_attendance_photo %}<img class="thumb" src="{{ r.custom_attendance_photo }}" alt="">{% else %}<span class="muted">—</span>{% endif %}</td>
-					<td>
-						{% if r.attendance %}<a href="/app/attendance/{{ r.attendance }}">Marked</a>
-						{% elif r.custom_review_status == "Pending Review" %}<span class="warn">Pending</span>
-						{% elif r.custom_review_status == "Rejected" %}<span class="bad">Rejected</span>
-						{% else %}<span class="ok">{{ r.custom_review_status }}</span>{% endif %}
-					</td>
-					<td class="muted">{% if r.custom_reviewed_by %}{{ r.custom_reviewed_by }}{% if r.custom_reviewed_on %} · {{ frappe.format(r.custom_reviewed_on, {"fieldtype": "Datetime"}) }}{% endif %}{% else %}—{% endif %}</td>
+					<td>{{ a.employee_name }}</td>
+					<td>{% if a.status == "Present" %}<span class="ok">Present</span>{% elif a.status == "Absent" %}<span class="bad">Absent</span>{% else %}<span class="warn">{{ a.status }}</span>{% endif %}</td>
+					<td>{{ a.custom_project or "—" }}</td>
+					<td>{{ a.in_time.strftime("%H:%M") if a.in_time else "—" }}</td>
+					<td>{{ a.out_time.strftime("%H:%M") if a.out_time else "—" }}</td>
+					<td>{{ a.working_hours or 0 }}</td>
+					<td><a href="/app/attendance/{{ a.name }}">{{ a.name }}</a></td>
 				</tr>
 			{% endfor %}
+			{% if attendance_leave %}
+				<tr><td colspan="7" class="muted">On leave: {{ attendance_leave|map(attribute="employee_name")|join(", ") }}</td></tr>
+			{% endif %}
 			</tbody>
 		</table>
 		</div>
-	</div>
-	{% endfor %}
-
-	{% if attendance %}
-	<h2 class="ar-h2">Attendance for this day</h2>
-	<div class="ar-scroll">
-	<table class="ar">
-		<thead><tr><th>Employee</th><th>Status</th><th>Project</th><th>In</th><th>Out</th><th>Hours</th><th>Record</th></tr></thead>
-		<tbody>
-		{% for a in attendance %}
-			<tr>
-				<td>{{ a.employee_name }}</td>
-				<td>{% if a.status == "Present" %}<span class="ok">Present</span>{% elif a.status == "Absent" %}<span class="bad">Absent</span>{% else %}<span class="muted">{{ a.status }}</span>{% endif %}</td>
-				<td>{{ a.custom_project or "—" }}</td>
-				<td>{{ a.in_time.strftime("%H:%M") if a.in_time else "—" }}</td>
-				<td>{{ a.out_time.strftime("%H:%M") if a.out_time else "—" }}</td>
-				<td>{{ a.working_hours or 0 }}</td>
-				<td><a href="/app/attendance/{{ a.name }}">{{ a.name }}</a></td>
-			</tr>
-		{% endfor %}
-		</tbody>
-	</table>
-	</div>
+	</details>
 	{% endif %}
 
 </div>
 
 <script>
+(function () {
+	// Match the theme Frappe actually rendered: measure the page background instead of trusting the OS setting.
+	const wrap = document.getElementById("ar-wrap");
+	function luminance(color) {
+		const m = color && color.match(/\d+(\.\d+)?/g);
+		if (!m || m.length < 3) return 1;
+		if (m.length >= 4 && parseFloat(m[3]) === 0) return 1;
+		return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255;
+	}
+	function applyTheme() {
+		const bodyBg = getComputedStyle(document.body).backgroundColor;
+		const htmlBg = getComputedStyle(document.documentElement).backgroundColor;
+		const lum = Math.min(luminance(bodyBg), luminance(htmlBg));
+		const dark = document.documentElement.getAttribute("data-theme") === "dark" || lum < 0.5;
+		wrap.setAttribute("data-ar-theme", dark ? "dark" : "light");
+	}
+	applyTheme();
+	new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
+})();
+
 frappe.ready(function () {
 	const out = document.getElementById("ar-result");
+	const bulk = document.getElementById("ar-bulk");
+	if (!bulk) return;
 	const relBtn = document.getElementById("ar-release");
-	if (!relBtn) return;
 	const rejBtn = document.getElementById("ar-reject");
 	const projSel = document.getElementById("ar-project-select");
 	const projBtn = document.getElementById("ar-set-project");
 	const procBtn = document.getElementById("ar-process");
+	const countEl = document.getElementById("ar-count");
 
 	const picks = () => Array.from(document.querySelectorAll(".ar-pick:checked")).map(c => c.value);
-
-	function say(cls, text) { out.className = cls; out.textContent = text; }
+	function say(cls, text) { out.className = cls; out.textContent = text; out.scrollIntoView({ block: "nearest" }); }
 	function reload(delay) { setTimeout(() => window.location.reload(), delay || 900); }
 	function summarise(results) {
-		return results.map(r => {
+		return (results || []).map(r => {
 			const who = r.employee || "";
 			if (r.status === "marked") return `${who}: marked ${r.attendance} (${r.attendance_status}, ${r.working_hours} h)`;
-			if (r.status === "held") return `${who}: held — ${(r.reasons || []).join("; ")}`;
+			if (r.status === "held") return `${who}: held — ${(r.reasons || []).join("; ")}${r.message ? " · " + r.message : ""}`;
 			if (r.status === "nothing") return `${who}: nothing to do`;
 			return `${who}: ${r.status} ${r.message || ""}`;
 		}).join(" | ");
 	}
-
 	function sync() {
 		const n = picks().length;
-		relBtn.disabled = rejBtn.disabled = n === 0;
+		bulk.classList.toggle("on", n > 0);
+		countEl.textContent = n ? `${n} check-in${n === 1 ? "" : "s"} selected` : "";
 		projBtn.disabled = n === 0 || !projSel.value;
-		relBtn.textContent = n ? `Release & mark ${n} selected` : "Release & mark selected";
 	}
 	document.querySelectorAll(".ar-pick").forEach(c => c.addEventListener("change", sync));
 	projSel.addEventListener("change", sync);
 	document.querySelectorAll(".ar-pick-group").forEach(g => g.addEventListener("change", function () {
-		const emp = this.closest(".ar-group").dataset.employee;
-		document.querySelectorAll(`.ar-pick[data-employee="${emp}"]`).forEach(c => { c.checked = g.checked; });
+		this.closest(".ar-card").querySelectorAll(".ar-pick").forEach(c => { c.checked = g.checked; });
 		sync();
 	}));
+	document.getElementById("ar-clear").addEventListener("click", function () {
+		document.querySelectorAll(".ar-pick, .ar-pick-group").forEach(c => { c.checked = false; });
+		sync();
+	});
 
 	function call(method, args, onOk) {
 		say("muted", "Working…");
@@ -327,24 +369,28 @@ frappe.ready(function () {
 			error: () => say("warn", "Failed — see the browser console."),
 		});
 	}
-
-	relBtn.addEventListener("click", function () {
-		const names = picks(); if (!names.length) return;
-		relBtn.disabled = true;
+	function release(names) {
 		call("trident_attendance.api.release_checkins", { names: JSON.stringify(names) }, m => {
-			say(m.marked ? "ok" : "warn", summarise(m.results || []) || m.message || "Nothing released.");
+			say(m.marked ? "ok" : "warn", summarise(m.results) || m.message || "Nothing released.");
 			reload(1600);
 		});
-	});
-
-	rejBtn.addEventListener("click", function () {
-		const names = picks(); if (!names.length) return;
-		const reason = window.prompt(`Reject ${names.length} check-in(s). Reason:`);
+	}
+	function reject(names, label) {
+		const reason = window.prompt(`Reject ${label}. Reason:`);
 		if (reason === null) return;
 		call("trident_attendance.api.reject_checkins", { names: JSON.stringify(names), reason }, m => {
 			say("ok", `${m.rejected} check-in(s) rejected. Reloading…`); reload();
 		});
-	});
+	}
+
+	relBtn.addEventListener("click", () => { const n = picks(); if (n.length) release(n); });
+	rejBtn.addEventListener("click", () => { const n = picks(); if (n.length) reject(n, `${n.length} check-in(s)`); });
+	document.querySelectorAll(".ar-release-one").forEach(b => b.addEventListener("click", function () {
+		release(JSON.parse(this.dataset.names));
+	}));
+	document.querySelectorAll(".ar-reject-one").forEach(b => b.addEventListener("click", function () {
+		reject(JSON.parse(this.dataset.names), `${this.dataset.name}'s day`);
+	}));
 
 	projBtn.addEventListener("click", function () {
 		const names = picks(); const project = projSel.value; if (!names.length || !project) return;
@@ -376,7 +422,7 @@ frappe.ready(function () {
 		});
 	}));
 
-	procBtn.addEventListener("click", function () {
+	if (procBtn) procBtn.addEventListener("click", function () {
 		procBtn.disabled = true;
 		const includeToday = document.getElementById("ar-include-today").checked ? 1 : 0;
 		call("trident_attendance.api.process_attendance", { include_today: includeToday }, m => {
