@@ -1,31 +1,48 @@
-"""Server-side staging gate for Employee Checkin.
+"""Employee Checkin doc events: stage app punches and annotate them with hold reasons.
 
-Every punch is held for review on arrival, whatever created it: the Android app, the
-ZKTeco sync tool, a manual Desk entry or a data import.
+Punches from the mobile app never enter hrms auto-attendance: `skip_auto_attendance` stays 1
+for their whole life and this app links them to Attendance itself (see tasks.mark_day). The
+review state lives in `custom_review_status`.
 
-Enforcing it here rather than in each client is the whole point. A client-side flag
-means staging holds only while every client remembers to set it -- and a sync tool
-that gets updated, reconfigured or replaced would silently start feeding unreviewed
-punches straight into Attendance, with nothing to notice it had happened.
+Nothing here raises for a rule. Rejecting a request parks the punch as FAILED on the handset,
+which never retries it, so a doubtful punch is held with a reason instead.
 """
 
-import frappe
+from trident_attendance.checkin_rules import (
+	FACE_PREFIX,
+	evaluate_face,
+	evaluate_instant,
+	refresh_project_reasons,
+	strip_prefixes,
+)
+from trident_attendance.utils import STATUS_PENDING, get_settings, in_scope, join_reasons, split_reasons
 
-# hrms' get_employee_checkins() filters on skip_auto_attendance = 0, so a held punch
-# is invisible to attendance processing until a reviewer releases it.
-HOLD_NEW_CHECKINS = True
 
-
-def hold_for_review(doc, method=None):
-	"""before_insert on Employee Checkin: stage the punch unless already staged."""
-	if not HOLD_NEW_CHECKINS:
+def before_insert(doc, method=None):
+	settings = get_settings()
+	if not in_scope(doc, settings):
 		return
-
-	if doc.skip_auto_attendance:
-		return
-
-	# Releasing happens on existing rows, so this only ever touches genuinely new punches.
 	doc.skip_auto_attendance = 1
-	frappe.logger("trident_attendance").debug(
-		f"Held new check-in for review: employee={doc.employee} time={doc.time} device={doc.device_id}"
-	)
+	doc.custom_review_status = STATUS_PENDING
+	doc.custom_hold_reasons = None
+	doc.custom_reviewed_by = None
+	doc.custom_reviewed_on = None
+
+
+def validate(doc, method=None):
+	"""Runs after hrms's own validate. Idempotent across the app's follow-up PUTs."""
+	settings = get_settings()
+	if not in_scope(doc, settings):
+		return
+
+	if doc.is_new():
+		doc.custom_hold_reasons = join_reasons(evaluate_instant(doc, settings))
+		return
+
+	if doc.custom_review_status != STATUS_PENDING:
+		return
+	if doc.has_value_changed("custom_site_project"):
+		doc.custom_hold_reasons = refresh_project_reasons(doc, settings)
+	if doc.has_value_changed("custom_face_match_result"):
+		kept = strip_prefixes(split_reasons(doc.custom_hold_reasons), (FACE_PREFIX,))
+		doc.custom_hold_reasons = join_reasons(kept + evaluate_face(doc) + list(doc.flags.trident_reasons or []))

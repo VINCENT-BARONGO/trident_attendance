@@ -1,0 +1,252 @@
+{
+ "actions": [],
+ "creation": "2026-09-09 18:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "scope_section",
+  "staged_sources",
+  "day_section",
+  "day_cutoff_time",
+  "half_day_threshold_hours",
+  "absent_threshold_hours",
+  "column_break_day",
+  "mark_absent_without_punches",
+  "staging_section",
+  "auto_release_clean_punches",
+  "hold_on_face_mismatch",
+  "hold_on_face_unverified",
+  "column_break_staging",
+  "hold_on_missing_out",
+  "hold_on_outside_geofence",
+  "hold_on_no_gps",
+  "supervisor_section",
+  "enforce_project_user_list",
+  "require_supervisor_checkin_first",
+  "column_break_supervisor",
+  "require_supervisor_checkout_first",
+  "require_supervisor_face_match",
+  "geo_section",
+  "geofence_tolerance_meters",
+  "auto_checkout_section",
+  "auto_checkout",
+  "auto_checkout_time",
+  "retention_section",
+  "photo_retention_days"
+ ],
+ "fields": [
+  {
+   "fieldname": "scope_section",
+   "fieldtype": "Section Break",
+   "label": "Scope"
+  },
+  {
+   "default": "Mobile app only",
+   "description": "Which check-ins go through staging and are turned into Attendance by this app. Biometric device punches are left alone unless \"All sources\" is chosen.",
+   "fieldname": "staged_sources",
+   "fieldtype": "Select",
+   "label": "Staged Sources",
+   "options": "Mobile app only\nAll sources"
+  },
+  {
+   "fieldname": "day_section",
+   "fieldtype": "Section Break",
+   "label": "Day Rules"
+  },
+  {
+   "default": "20:00:00",
+   "description": "After this time, today's check-ins are treated as complete and can be marked. Earlier days are always complete.",
+   "fieldname": "day_cutoff_time",
+   "fieldtype": "Time",
+   "label": "Day Cutoff Time"
+  },
+  {
+   "default": "4",
+   "description": "Mark Half Day when hours between first IN and last OUT are below this. 0 disables.",
+   "fieldname": "half_day_threshold_hours",
+   "fieldtype": "Float",
+   "label": "Half Day Threshold (hours)"
+  },
+  {
+   "default": "0",
+   "description": "Mark Absent when hours are below this. 0 disables.",
+   "fieldname": "absent_threshold_hours",
+   "fieldtype": "Float",
+   "label": "Absent Threshold (hours)"
+  },
+  {
+   "fieldname": "column_break_day",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Active employees with an Assigned Project, on working days, with no check-ins and no Attendance, are marked Absent automatically.",
+   "fieldname": "mark_absent_without_punches",
+   "fieldtype": "Check",
+   "label": "Mark Absent When No Check-ins"
+  },
+  {
+   "fieldname": "staging_section",
+   "fieldtype": "Section Break",
+   "label": "Staging"
+  },
+  {
+   "default": "1",
+   "description": "Days with no blocking reason are released and marked automatically once complete. Off = every day waits for a reviewer.",
+   "fieldname": "auto_release_clean_punches",
+   "fieldtype": "Check",
+   "label": "Auto-release Clean Days"
+  },
+  {
+   "default": "1",
+   "fieldname": "hold_on_face_mismatch",
+   "fieldtype": "Check",
+   "label": "Hold on Face: No Match"
+  },
+  {
+   "default": "0",
+   "description": "Hold when the face could not be compared (no profile photo, no face detected, model unavailable). Leave off until employees have profile photos.",
+   "fieldname": "hold_on_face_unverified",
+   "fieldtype": "Check",
+   "label": "Hold on Face: Unverified"
+  },
+  {
+   "fieldname": "column_break_staging",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "hold_on_missing_out",
+   "fieldtype": "Check",
+   "label": "Hold on Missing OUT"
+  },
+  {
+   "default": "1",
+   "fieldname": "hold_on_outside_geofence",
+   "fieldtype": "Check",
+   "label": "Hold on Outside Geofence"
+  },
+  {
+   "default": "0",
+   "description": "Hold when the punch or the project has no GPS coordinates.",
+   "fieldname": "hold_on_no_gps",
+   "fieldtype": "Check",
+   "label": "Hold on Missing GPS"
+  },
+  {
+   "fieldname": "supervisor_section",
+   "fieldtype": "Section Break",
+   "label": "Supervisor Rules"
+  },
+  {
+   "default": "1",
+   "description": "The user taking attendance must be listed in the project's Users table.",
+   "fieldname": "enforce_project_user_list",
+   "fieldtype": "Check",
+   "label": "Supervisor Must Be a Project User"
+  },
+  {
+   "default": "1",
+   "description": "A worker's IN is held unless the supervisor checked themselves in first at the same project.",
+   "fieldname": "require_supervisor_checkin_first",
+   "fieldtype": "Check",
+   "label": "Supervisor Checks In First"
+  },
+  {
+   "fieldname": "column_break_supervisor",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "A worker's OUT is held unless the supervisor checked themselves out first at the same project.",
+   "fieldname": "require_supervisor_checkout_first",
+   "fieldtype": "Check",
+   "label": "Supervisor Checks Out First"
+  },
+  {
+   "default": "1",
+   "description": "The supervisor's own check-in / check-out must have Face Match Result = Matched to count.",
+   "fieldname": "require_supervisor_face_match",
+   "fieldtype": "Check",
+   "label": "Supervisor Face Must Match"
+  },
+  {
+   "fieldname": "geo_section",
+   "fieldtype": "Section Break",
+   "label": "Geofence"
+  },
+  {
+   "default": "50",
+   "description": "Added to each project's geofence radius on the server to absorb GPS drift.",
+   "fieldname": "geofence_tolerance_meters",
+   "fieldtype": "Int",
+   "label": "Geofence Tolerance (metres)"
+  },
+  {
+   "fieldname": "auto_checkout_section",
+   "fieldtype": "Section Break",
+   "label": "Auto Checkout"
+  },
+  {
+   "default": "0",
+   "description": "When the only problem with a day is a missing OUT, create an OUT punch at the time below instead of holding the day.",
+   "fieldname": "auto_checkout",
+   "fieldtype": "Check",
+   "label": "Auto Checkout"
+  },
+  {
+   "default": "17:00:00",
+   "depends_on": "auto_checkout",
+   "fieldname": "auto_checkout_time",
+   "fieldtype": "Time",
+   "label": "Auto Checkout Time"
+  },
+  {
+   "fieldname": "retention_section",
+   "fieldtype": "Section Break",
+   "label": "Retention"
+  },
+  {
+   "default": "30",
+   "description": "Attendance face photos older than this are deleted daily. The check-in row is kept.",
+   "fieldname": "photo_retention_days",
+   "fieldtype": "Int",
+   "label": "Photo Retention (days)"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-09 18:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Trident Attendance Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Attendance Admin",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

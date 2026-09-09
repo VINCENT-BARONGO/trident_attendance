@@ -1,79 +1,361 @@
-"""Endpoints for the attendance review page.
+"""Whitelisted endpoints.
 
-Deliberately thin: the page is a view over stock ERPNext data and the buttons call
-hrms's own auto-attendance routine. No parallel schema, no second source of truth --
-Employee Checkin stays the raw punch log and Attendance stays the committed record.
+Reviewer endpoints back the /attendance-review page and require the Attendance Admin role
+(not a doctype permission: on the live site the mobile app's own role also holds Attendance
+create, so a permission check could not tell a supervisor from a reviewer).
 
-Staging works through the stock `skip_auto_attendance` field. The mobile app posts
-every punch with it set, and hrms' get_employee_checkins() filters on
-skip_auto_attendance = 0, so held punches are invisible to attendance processing
-until a reviewer releases them here.
+Supervisor endpoints are what the Android app calls. Everything they return is scoped to the
+calling user's own punches and projects.
 """
 
+import base64
 import json
 
 import frappe
 from frappe import _
+from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
+
+from trident_attendance import tasks
+from trident_attendance.checkin_rules import REJECTED_PREFIX
+from trident_attendance.utils import (
+	INTERNAL_SOURCE_PREFIX,
+	STATUS_PENDING,
+	STATUS_REJECTED,
+	SUPERVISOR_ROLES,
+	combine_datetime,
+	day_bounds,
+	get_settings,
+	is_reviewer,
+	join_reasons,
+	last_complete_date,
+	scope_filters,
+	split_reasons,
+)
 
 
 def _require_reviewer():
-	"""Both actions admit data into payroll, so both need the same authority.
+	if not is_reviewer():
+		frappe.throw(_("Only users with the Attendance Admin role can review check-ins."), frappe.PermissionError)
 
-	Write on Employee Checkin is deliberately NOT the test: the mobile app's own role
-	holds that (it patches custom fields after creating a punch), so using it would let
-	a supervisor release their own scans from the handset.
-	"""
-	if not frappe.has_permission("Attendance", "create"):
-		frappe.throw(
-			_("You are not permitted to release check-ins or create Attendance records."),
-			frappe.PermissionError,
-		)
+
+def _require_supervisor():
+	if not (SUPERVISOR_ROLES & set(frappe.get_roles())):
+		frappe.throw(_("You are not permitted to use the attendance app."), frappe.PermissionError)
+
+
+def _names(names) -> list[str]:
+	if isinstance(names, str):
+		names = json.loads(names) if names.startswith("[") else [names]
+	return [n for n in (names or []) if n]
+
+
+def _groups(names) -> list[tuple[str, object]]:
+	groups = []
+	for name in _names(names):
+		row = frappe.db.get_value("Employee Checkin", name, ["employee", "time"], as_dict=True)
+		if not row:
+			continue
+		key = (row.employee, getdate(row.time))
+		if key not in groups:
+			groups.append(key)
+	return groups
+
+
+# ---------------------------------------------------------------------------
+# Reviewer endpoints
+# ---------------------------------------------------------------------------
 
 
 @frappe.whitelist()
 def release_checkins(names):
-	"""Clear skip_auto_attendance so these punches become eligible for Attendance."""
+	"""Release every open punch of the selected employee-days and mark them now."""
 	_require_reviewer()
-
-	if isinstance(names, str):
-		names = json.loads(names)
-	if not names:
+	groups = _groups(names)
+	if not groups:
 		return {"ok": False, "message": _("Nothing selected.")}
-
-	released = 0
-	for name in names:
-		# Re-read each row rather than trusting the posted list: the page may be stale,
-		# and releasing something already processed would be a silent no-op worth avoiding.
-		row = frappe.db.get_value(
-			"Employee Checkin", name, ["skip_auto_attendance", "attendance"], as_dict=True
-		)
-		if not row or row.attendance or not row.skip_auto_attendance:
-			continue
-		frappe.db.set_value("Employee Checkin", name, "skip_auto_attendance", 0)
-		released += 1
-
-	frappe.db.commit()
-	return {"ok": True, "released": released}
+	settings = get_settings()
+	results = [
+		tasks.finalise_group(employee, day, settings, released_by=frappe.session.user, force=True)
+		for employee, day in groups
+	]
+	return {"ok": True, "results": results, "marked": len([r for r in results if r["status"] == "marked"])}
 
 
 @frappe.whitelist()
-def process_attendance():
-	"""Convert released check-ins into Attendance via each shift's own rules."""
+def reject_checkins(names, reason=None):
 	_require_reviewer()
+	rejected = 0
+	for name in _names(names):
+		row = frappe.db.get_value("Employee Checkin", name, ["custom_review_status", "attendance", "custom_hold_reasons"], as_dict=True)
+		if not row or row.attendance or row.custom_review_status == STATUS_REJECTED:
+			continue
+		reasons = split_reasons(row.custom_hold_reasons) + [f"{REJECTED_PREFIX} {reason or _('rejected by reviewer')}"]
+		frappe.db.set_value(
+			"Employee Checkin",
+			name,
+			{
+				"custom_review_status": STATUS_REJECTED,
+				"custom_hold_reasons": join_reasons(reasons),
+				"custom_reviewed_by": frappe.session.user,
+				"custom_reviewed_on": now_datetime(),
+			},
+			update_modified=False,
+		)
+		rejected += 1
+	return {"ok": True, "rejected": rejected}
 
-	shifts = frappe.get_all("Shift Type", filters={"enable_auto_attendance": 1}, pluck="name")
-	if not shifts:
-		return {
-			"ok": False,
-			"message": _("No Shift Type has auto attendance enabled, so there is nothing to process."),
+
+@frappe.whitelist()
+def set_checkin_project(name, project):
+	_require_reviewer()
+	doc = frappe.get_doc("Employee Checkin", name)
+	if doc.custom_review_status != STATUS_PENDING or doc.attendance:
+		frappe.throw(_("Only check-ins awaiting review can be moved to another project."))
+	doc.custom_site_project = project
+	doc.flags.ignore_permissions = True
+	doc.save()
+	return {"ok": True, "hold_reasons": split_reasons(doc.custom_hold_reasons)}
+
+
+@frappe.whitelist()
+def add_missing_out(name, time):
+	"""Create an OUT punch for the day of the given check-in, then re-evaluate that day."""
+	_require_reviewer()
+	ref = frappe.db.get_value(
+		"Employee Checkin", name, ["employee", "time", "custom_site_project", "custom_logged_by"], as_dict=True
+	)
+	if not ref:
+		frappe.throw(_("Check-in {0} not found.").format(name))
+	day = getdate(ref.time)
+	out_time = combine_datetime(day, time) if len(str(time)) <= 8 else get_datetime(time)
+	if out_time <= get_datetime(ref.time):
+		frappe.throw(_("The OUT time must be after the check-in at {0}.").format(ref.time))
+
+	tasks.create_internal_punch(
+		employee=ref.employee,
+		log_type="OUT",
+		time=out_time,
+		project=ref.custom_site_project,
+		logged_by=ref.custom_logged_by,
+		source=f"{INTERNAL_SOURCE_PREFIX}manual",
+	)
+	return {"ok": True, "result": tasks.finalise_group(ref.employee, day, get_settings())}
+
+
+@frappe.whitelist()
+def cancel_and_remark(attendance):
+	"""Cancel an Attendance and rebuild it from the day's check-ins."""
+	_require_reviewer()
+	att = frappe.get_doc("Attendance", attendance)
+	employee, day = att.employee, getdate(att.attendance_date)
+	if att.docstatus == 1:
+		att.flags.ignore_permissions = True
+		att.cancel()
+	result = tasks.finalise_group(employee, day, get_settings(), released_by=frappe.session.user, force=True)
+	return {"ok": True, "result": result}
+
+
+@frappe.whitelist()
+def process_attendance(include_today=0):
+	_require_reviewer()
+	summary = tasks.finalise_days(force_today=cint(include_today))
+	return {"ok": True, **summary}
+
+
+# ---------------------------------------------------------------------------
+# Supervisor endpoints (mobile app)
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist()
+def get_my_projects():
+	"""Open projects the calling user is listed on. No fallback to all projects."""
+	_require_supervisor()
+	fields = [
+		"name",
+		"project_name",
+		"status",
+		"custom_site_latitude",
+		"custom_site_longitude",
+		"custom_geofence_radius_meters",
+	]
+	if is_reviewer():
+		return frappe.get_all("Project", filters={"status": "Open"}, fields=fields, order_by="project_name")
+	allowed = frappe.get_all(
+		"Project User", filters={"user": frappe.session.user, "parenttype": "Project"}, pluck="parent"
+	)
+	if not allowed:
+		return []
+	return frappe.get_all(
+		"Project", filters={"name": ["in", allowed], "status": "Open"}, fields=fields, order_by="project_name"
+	)
+
+
+@frappe.whitelist()
+def sync_checkin(
+	client_uid,
+	employee,
+	log_type,
+	time,
+	custom_site_project=None,
+	custom_id_number_scanned=None,
+	custom_mrz_raw=None,
+	custom_face_match_result=None,
+	custom_face_match_score=None,
+	latitude=None,
+	longitude=None,
+	custom_app_source=None,
+	photo_base64=None,
+	photo_filename=None,
+):
+	"""Idempotent single-call ingestion for the mobile app."""
+	_require_supervisor()
+	if not client_uid:
+		frappe.throw(_("client_uid is required."))
+
+	existing = frappe.db.get_value(
+		"Employee Checkin",
+		{"custom_client_uid": client_uid},
+		["name", "custom_review_status", "custom_hold_reasons"],
+		as_dict=True,
+	)
+	if not existing:
+		# Same punch re-sent without its uid (older app build): treat like a replay too.
+		existing = frappe.db.get_value(
+			"Employee Checkin",
+			{"employee": employee, "log_type": log_type, "time": get_datetime(time).replace(microsecond=0)},
+			["name", "custom_review_status", "custom_hold_reasons"],
+			as_dict=True,
+		)
+	if existing:
+		return _sync_response(existing, duplicate=True)
+
+	doc = frappe.new_doc("Employee Checkin")
+	doc.update(
+		{
+			"employee": employee,
+			"log_type": log_type,
+			"time": get_datetime(time),
+			"skip_auto_attendance": 1,
+			"custom_client_uid": client_uid,
+			"custom_site_project": custom_site_project,
+			"custom_id_number_scanned": custom_id_number_scanned,
+			"custom_mrz_raw": custom_mrz_raw,
+			"custom_face_match_result": custom_face_match_result,
+			"custom_face_match_score": flt(custom_face_match_score),
+			"latitude": flt(latitude) or None,
+			"longitude": flt(longitude) or None,
+			"custom_app_source": custom_app_source or "TPL-FieldApp",
 		}
+	)
+	doc.insert()
 
-	before = frappe.db.count("Attendance")
-	messages = []
-	for name in shifts:
-		shift = frappe.get_doc("Shift Type", name)
-		result = shift.process_auto_attendance(is_manually_triggered=True)
-		messages.append(f"{name}: {result or _('nothing to process')}")
+	if photo_base64:
+		try:
+			_attach_photo(doc, photo_base64, photo_filename)
+		except Exception:
+			frappe.log_error(title=f"trident_attendance: photo attach failed for {doc.name}")
 
-	created = frappe.db.count("Attendance") - before
-	return {"ok": True, "created": created, "messages": messages}
+	return _sync_response(doc, duplicate=False)
+
+
+def _attach_photo(doc, photo_base64, filename=None):
+	content = base64.b64decode(photo_base64.split(",", 1)[-1])
+	stamp = get_datetime(doc.time).strftime("%Y%m%d_%H%M%S")
+	file_doc = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": filename or f"checkin_{doc.employee}_{stamp}.jpg",
+			"attached_to_doctype": "Employee Checkin",
+			"attached_to_name": doc.name,
+			"attached_to_field": "custom_attendance_photo",
+			"is_private": 1,
+			"content": content,
+		}
+	)
+	file_doc.flags.ignore_permissions = True
+	file_doc.insert()
+	frappe.db.set_value("Employee Checkin", doc.name, "custom_attendance_photo", file_doc.file_url, update_modified=False)
+
+
+def _sync_response(row, duplicate: bool) -> dict:
+	return {
+		"name": row.name,
+		"review_status": row.custom_review_status,
+		"hold_reasons": split_reasons(row.custom_hold_reasons),
+		"duplicate": duplicate,
+	}
+
+
+@frappe.whitelist()
+def get_my_history(from_date=None, to_date=None, project=None):
+	"""The caller's own punches with their review outcome, plus a per-day summary."""
+	_require_supervisor()
+	to_date = getdate(to_date or nowdate())
+	from_date = getdate(from_date) if from_date else add_days(to_date, -14)
+	start, _ = day_bounds(from_date)
+	_, end = day_bounds(to_date)
+
+	filters = {"time": ["between", [start, end]]}
+	filters.update(scope_filters())
+	if project:
+		filters["custom_site_project"] = project
+	if not is_reviewer():
+		filters["owner"] = frappe.session.user
+
+	rows = frappe.get_all(
+		"Employee Checkin",
+		filters=filters,
+		fields=[
+			"name",
+			"employee",
+			"employee_name",
+			"log_type",
+			"time",
+			"custom_site_project",
+			"custom_logged_by",
+			"custom_face_match_result",
+			"custom_face_match_score",
+			"custom_distance_from_site",
+			"custom_review_status",
+			"custom_hold_reasons",
+			"attendance",
+			"custom_app_source",
+		],
+		order_by="time desc",
+	)
+
+	attendance_names = [r.attendance for r in rows if r.attendance]
+	attendance = {}
+	if attendance_names:
+		for a in frappe.get_all(
+			"Attendance",
+			filters={"name": ["in", attendance_names]},
+			fields=["name", "status", "working_hours", "in_time", "out_time", "custom_project"],
+		):
+			attendance[a.name] = a
+
+	days = {}
+	for r in rows:
+		r.hold_reasons = split_reasons(r.custom_hold_reasons)
+		r.attendance_detail = attendance.get(r.attendance)
+		key = str(getdate(r.time))
+		d = days.setdefault(key, {"date": key, "punches": 0, "employees": set(), "marked": 0, "pending": 0, "rejected": 0})
+		d["punches"] += 1
+		d["employees"].add(r.employee)
+		if r.attendance:
+			d["marked"] += 1
+		elif r.custom_review_status == STATUS_REJECTED:
+			d["rejected"] += 1
+		else:
+			d["pending"] += 1
+	for d in days.values():
+		d["employees"] = len(d["employees"])
+
+	return {
+		"from_date": str(from_date),
+		"to_date": str(to_date),
+		"complete_up_to": str(last_complete_date()),
+		"punches": rows,
+		"days": sorted(days.values(), key=lambda d: d["date"], reverse=True),
+	}
