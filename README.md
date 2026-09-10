@@ -126,6 +126,20 @@ shared plans.
 - Do not enable auto attendance on a Shift Type for employees who use the app while
   *Staged Sources* is "All sources".
 
+### Before pushing: check API usage against the site's frappe version
+
+There is no bench in the development environment, so every `frappe.*` name and keyword
+argument is checked statically against the frappe source of the version running on the
+site (see "App Versions" in any error report):
+
+```bash
+git clone --depth 1 --branch v15.120.1 https://github.com/frappe/frappe.git /tmp/frappe_src
+python scripts/check_frappe_api.py /tmp/frappe_src
+```
+
+It exits non-zero and lists unknown functions or keywords. Update the tag when the site
+is upgraded.
+
 ### Regenerating fixtures
 
 After changing custom fields, roles or permissions on a site:
