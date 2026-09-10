@@ -13,7 +13,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowdate
+from frappe.utils import add_days, cint, date_diff, flt, get_datetime, getdate, now_datetime, nowdate
 
 from trident_attendance import tasks
 from trident_attendance.checkin_rules import REJECTED_PREFIX
@@ -287,6 +287,28 @@ def _sync_response(row, duplicate: bool) -> dict:
 	}
 
 
+HISTORY_FIELDS = [
+	"name",
+	"employee",
+	"employee_name",
+	"log_type",
+	"time",
+	"custom_site_project",
+	"custom_logged_by",
+	"custom_face_match_result",
+	"custom_face_match_score",
+	"custom_distance_from_site",
+	"custom_review_status",
+	"custom_hold_reasons",
+	"attendance",
+	"custom_app_source",
+]
+
+# One report is one request and one response held in the phone's memory. A month across a
+# supervisor's sites is already a few thousand punches.
+MAX_REPORT_DAYS = 31
+
+
 @frappe.whitelist()
 def get_my_history(from_date=None, to_date=None, project=None):
 	"""The caller's own punches with their review outcome, plus a per-day summary."""
@@ -303,28 +325,19 @@ def get_my_history(from_date=None, to_date=None, project=None):
 	if not is_reviewer():
 		filters["owner"] = frappe.session.user
 
-	rows = frappe.get_all(
-		"Employee Checkin",
-		filters=filters,
-		fields=[
-			"name",
-			"employee",
-			"employee_name",
-			"log_type",
-			"time",
-			"custom_site_project",
-			"custom_logged_by",
-			"custom_face_match_result",
-			"custom_face_match_score",
-			"custom_distance_from_site",
-			"custom_review_status",
-			"custom_hold_reasons",
-			"attendance",
-			"custom_app_source",
-		],
-		order_by="time desc",
-	)
+	rows = frappe.get_all("Employee Checkin", filters=filters, fields=HISTORY_FIELDS, order_by="time desc")
+	days = _enrich_punches(rows)
+	return {
+		"from_date": str(from_date),
+		"to_date": str(to_date),
+		"complete_up_to": str(last_complete_date()),
+		"punches": rows,
+		"days": days,
+	}
 
+
+def _enrich_punches(rows) -> list[dict]:
+	"""Adds hold reasons and the Attendance outcome to each punch, and returns per-day totals."""
 	attendance_names = [r.attendance for r in rows if r.attendance]
 	attendance = {}
 	if attendance_names:
@@ -351,11 +364,77 @@ def get_my_history(from_date=None, to_date=None, project=None):
 			d["pending"] += 1
 	for d in days.values():
 		d["employees"] = len(d["employees"])
+	return sorted(days.values(), key=lambda d: d["date"], reverse=True)
 
+
+def _report_projects() -> list[dict]:
+	"""Projects whose punches the caller may read: every project they are listed on, open or
+	closed, since a finished site's history is still theirs. Reviewers read every project."""
+	fields = ["name", "project_name", "status"]
+	if is_reviewer():
+		return frappe.get_all("Project", fields=fields, order_by="project_name")
+	listed = frappe.get_all(
+		"Project User", filters={"user": frappe.session.user, "parenttype": "Project"}, pluck="parent"
+	)
+	if not listed:
+		return []
+	return frappe.get_all("Project", filters={"name": ["in", listed]}, fields=fields, order_by="project_name")
+
+
+@frappe.whitelist()
+def get_project_report(from_date=None, to_date=None, projects=None):
+	"""Every punch on the caller's projects, whoever logged it, for the app's Reports screen.
+
+	get_my_history only returns punches the caller took. This is scoped by project instead: a
+	supervisor listed on several sites sees each of them in full, including staff clocked by
+	another supervisor, and nothing at all on a site they are not listed on.
+	"""
+	_require_supervisor()
+	to_date = getdate(to_date or nowdate())
+	from_date = getdate(from_date) if from_date else to_date
+	if from_date > to_date:
+		frappe.throw(_("The report start date must be on or before its end date."))
+	if date_diff(to_date, from_date) >= MAX_REPORT_DAYS:
+		frappe.throw(_("A report can cover at most {0} days.").format(MAX_REPORT_DAYS))
+
+	visible = _report_projects()
+	visible_names = [p.name for p in visible]
+	requested = _names(projects)
+	denied = sorted(set(requested) - set(visible_names))
+	if denied:
+		frappe.throw(_("You are not listed on {0}.").format(", ".join(denied)), frappe.PermissionError)
+	scope = requested or visible_names
+
+	rows = []
+	if scope:
+		filters = {
+			"time": ["between", [day_bounds(from_date)[0], day_bounds(to_date)[1]]],
+			"custom_site_project": ["in", scope],
+		}
+		filters.update(scope_filters())
+		rows = frappe.get_all(
+			"Employee Checkin", filters=filters, fields=HISTORY_FIELDS + ["owner"], order_by="time desc"
+		)
+
+	supervisors = list({r.custom_logged_by for r in rows if r.custom_logged_by})
+	supervisor_names = {}
+	if supervisors:
+		supervisor_names = dict(
+			frappe.get_all(
+				"Employee", filters={"name": ["in", supervisors]}, fields=["name", "employee_name"], as_list=True
+			)
+		)
+	for r in rows:
+		r.logged_by_name = supervisor_names.get(r.custom_logged_by)
+		# Say whether the caller took the punch without sending other supervisors' logins.
+		r.is_mine = r.pop("owner") == frappe.session.user
+
+	days = _enrich_punches(rows)
 	return {
 		"from_date": str(from_date),
 		"to_date": str(to_date),
 		"complete_up_to": str(last_complete_date()),
+		"projects": visible,
 		"punches": rows,
-		"days": sorted(days.values(), key=lambda d: d["date"], reverse=True),
+		"days": days,
 	}
