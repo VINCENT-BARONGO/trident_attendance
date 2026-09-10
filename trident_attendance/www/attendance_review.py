@@ -122,6 +122,8 @@ def get_context(context):
 	context.cutoff = str(get_time(settings.day_cutoff_time or "20:00:00"))[:5]
 	context.auto_release = bool(settings.auto_release_clean_punches)
 	context.queue_days = QUEUE_DAYS
+	# Follow the user's Desk theme; the website itself always renders light.
+	context.theme = (frappe.db.get_value("User", frappe.session.user, "desk_theme") or "Light").lower()
 	context.project_names = project_names
 	context.supervisor_names = supervisor_names
 

@@ -6,8 +6,10 @@
 
 {% block style %}
 <style>
-	/* Frappe renders website pages light regardless of the OS setting, so the tokens are switched
-	   at runtime from the page background that was actually painted (plus Frappe's data-theme). */
+	/* Frappe renders website pages light regardless of the user's Desk theme, so the theme is
+	   taken from User.desk_theme (Dark / Light / Automatic) and the whole page is painted. */
+	html.ar-dark, html.ar-dark body { background: #161b22 !important; color: #e6e8eb; }
+	html.ar-light, html.ar-light body { background: #ffffff !important; }
 	.ar-wrap {
 		--ar-bg: #ffffff; --ar-surface: #f6f7f9; --ar-surface-2: #eceff3; --ar-border: #e3e6ea; --ar-border-soft: #eff1f4;
 		--ar-text: #1f2937; --ar-muted: #6b7280; --ar-faint: #9ca3af; --ar-link: #1d4ed8;
@@ -114,7 +116,7 @@
 
 {% block page_content %}
 {% set qs = "&project=" ~ (project_filter|urlencode) ~ "&supervisor=" ~ (supervisor_filter|urlencode) %}
-<div class="ar-wrap" id="ar-wrap">
+<div class="ar-wrap" id="ar-wrap" data-theme-pref="{{ theme|e }}">
 
 	<div class="ar-top">
 		<h1>Attendance Review</h1>
@@ -344,19 +346,18 @@
 <script>
 (function () {
 	const wrap = document.getElementById("ar-wrap");
-	function luminance(color) {
-		const m = color && color.match(/\d+(\.\d+)?/g);
-		if (!m || m.length < 3) return 1;
-		if (m.length >= 4 && parseFloat(m[3]) === 0) return 1;
-		return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255;
-	}
+	const pref = wrap.dataset.themePref || "light";
 	function applyTheme() {
-		const lum = Math.min(luminance(getComputedStyle(document.body).backgroundColor), luminance(getComputedStyle(document.documentElement).backgroundColor));
-		const dark = document.documentElement.getAttribute("data-theme") === "dark" || lum < 0.5;
+		let dark = pref === "dark";
+		if (pref === "automatic") dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+		if (document.documentElement.getAttribute("data-theme") === "dark") dark = true;
 		wrap.setAttribute("data-ar-theme", dark ? "dark" : "light");
+		document.documentElement.classList.toggle("ar-dark", dark);
+		document.documentElement.classList.toggle("ar-light", !dark);
 	}
 	applyTheme();
-	new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
+	if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+	new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 	// Keep the scroll position and last message across the reload that follows every action.
 	try {

@@ -67,9 +67,9 @@ def get_pipeline_stats(days: int = 7) -> dict:
 	pending_days = len({(r.employee, getdate(r.time)) for r in pending_rows})
 	oldest_pending = min((getdate(r.time) for r in pending_rows), default=None)
 
-	last_punch = frappe.db.get_value(
-		"Employee Checkin", scope or {"name": ["is", "set"]}, ["max(creation)"], as_dict=False
-	)
+	last_punch = frappe.db.get_value("Employee Checkin", scope or {"name": ["is", "set"]}, "max(creation)")
+	if isinstance(last_punch, (list, tuple)):
+		last_punch = last_punch[0] if last_punch else None
 
 	runs = frappe.get_all(
 		"Trident Attendance Run",
@@ -134,7 +134,7 @@ def get_pipeline_stats(days: int = 7) -> dict:
 		"punches": {
 			"today": count({"creation": ["between", [today_start, today_end]]}),
 			"window": count({"creation": ["between", [window_start, window_end]]}),
-			"last_received": str(last_punch[0]) if last_punch and last_punch[0] else None,
+			"last_received": str(last_punch) if last_punch else None,
 			"supervisors_today": len(
 				frappe.get_all("Employee Checkin", filters={**scope, "creation": ["between", [today_start, today_end]]}, distinct=True, pluck="owner")
 			),

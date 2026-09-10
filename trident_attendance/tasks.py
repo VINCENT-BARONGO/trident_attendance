@@ -196,12 +196,18 @@ def get_day_logs(employee: str, day, settings=None, include_rejected: bool = Fal
 	filters = {"employee": employee, "time": ["between", [start, end]]}
 	if not include_rejected:
 		filters["custom_review_status"] = ["!=", STATUS_REJECTED]
-	filters.update(scope_filters(settings or get_settings()))
-	# for_update serialises the hourly job against a reviewer releasing the same day; the
-	# values are read under the lock, so neither side works from a stale snapshot.
-	return frappe.get_all(
-		"Employee Checkin", filters=filters, fields=PUNCH_FIELDS, order_by="time asc", for_update=for_update
-	)
+	scope = scope_filters(settings or get_settings())
+	filters.update(scope)
+	if for_update:
+		# Lock the day's rows first so the hourly job and a reviewer releasing the same day
+		# serialise, and the values below are read under that lock (never a stale snapshot).
+		frappe.db.sql(
+			"""select name from `tabEmployee Checkin`
+			where employee = %(employee)s and time between %(start)s and %(end)s
+			{scope} for update""".format(scope="and ifnull(custom_app_source, '') != ''" if scope else ""),
+			{"employee": employee, "start": start, "end": end},
+		)
+	return frappe.get_all("Employee Checkin", filters=filters, fields=PUNCH_FIELDS, order_by="time asc")
 
 
 def finalise_group(employee: str, day, settings=None, released_by: str | None = None, force: bool = False) -> dict:
