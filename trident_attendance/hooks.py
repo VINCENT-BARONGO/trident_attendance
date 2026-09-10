@@ -7,6 +7,12 @@ app_license = "mit"
 
 required_apps = ["erpnext", "hrms"]
 
+# The Custom DocPerm fixture only carries this app's roles; Frappe drops a doctype's standard
+# permissions once any Custom DocPerm exists for it, so the standard rows are copied in.
+after_install = "trident_attendance.install.after_install"
+after_sync = "trident_attendance.install.after_install"
+after_migrate = "trident_attendance.install.after_migrate"
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -85,5 +91,6 @@ scheduler_events = {
 	],
 	"daily": [
 		"trident_attendance.tasks.purge_attendance_photos",
+		"trident_attendance.trident_attendance.doctype.trident_attendance_run.trident_attendance_run.purge_old_runs",
 	],
 }

@@ -135,6 +135,9 @@ def evaluate_project(doc, settings) -> list[str]:
 
 	distance = get_distance_between_coordinates(flt(lat), flt(lon), flt(doc.latitude), flt(doc.longitude))
 	doc.custom_distance_from_site = round(distance, 1)
+	if radius is not None and cint(radius) <= 0:
+		# Radius 0 on the project means "no geofence at this site".
+		return reasons
 	allowed = cint(radius or 200) + cint(settings.geofence_tolerance_meters)
 	if distance > allowed:
 		reasons.append(f"{GEOFENCE_PREFIX} ({round(distance)}m, allowed {allowed}m)")

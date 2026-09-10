@@ -1,12 +1,13 @@
 """Small helpers shared by the check-in pipeline, API and reports."""
 
-from datetime import datetime, time as dtime
+from datetime import datetime, time as dtime, timedelta
 
 import frappe
 from frappe.utils import add_days, cint, get_datetime, get_time, getdate, now_datetime, nowdate
 
 SETTINGS_DOCTYPE = "Trident Attendance Settings"
 REVIEWER_ROLES = {"Attendance Admin", "System Manager"}
+VIEWER_ROLES = REVIEWER_ROLES | {"HR Manager", "HR User"}
 SUPERVISOR_ROLES = {"Attendance Marking", "Attendance Admin", "System Manager"}
 
 # Punches this app creates itself carry this prefix so the instant rules skip them.
@@ -48,6 +49,10 @@ def is_reviewer(user: str | None = None) -> bool:
 	return bool(REVIEWER_ROLES & set(frappe.get_roles(user)))
 
 
+def is_viewer(user: str | None = None) -> bool:
+	return bool(VIEWER_ROLES & set(frappe.get_roles(user)))
+
+
 def day_bounds(day) -> tuple[str, str]:
 	day = getdate(day)
 	return f"{day} 00:00:00", f"{day} 23:59:59"
@@ -85,6 +90,9 @@ def join_reasons(reasons) -> str | None:
 def combine_datetime(day, t) -> datetime:
 	if isinstance(t, str):
 		t = get_time(t)
+	if isinstance(t, timedelta):
+		# MariaDB returns Time columns as timedelta.
+		return datetime.combine(getdate(day), dtime(0, 0)) + t
 	if isinstance(t, dtime):
 		return datetime.combine(getdate(day), t)
 	return get_datetime(t)

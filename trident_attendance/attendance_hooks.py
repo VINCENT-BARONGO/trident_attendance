@@ -55,7 +55,6 @@ def before_cancel(doc, method=None):
 				"Employee Checkin",
 				name,
 				{"custom_review_status": STATUS_PENDING, "custom_reviewed_by": None, "custom_reviewed_on": None},
-				update_modified=False,
 			)
 	except Exception:
 		frappe.log_error(title="trident_attendance: re-hold on Attendance cancel failed")

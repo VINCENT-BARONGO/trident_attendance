@@ -97,6 +97,17 @@ tolerance, optional auto-checkout, optional absent marking, photo retention.
 
 **Reports** — *Attendance by Project*, *Check-in Staging Log*, *Setup Audit*.
 
+**Monitoring** — every processing run (hourly job, reviewer, manual) writes a
+`Trident Attendance Run` row; the Settings page opens with pipeline health (pending
+days, top hold reasons, punches today, scheduler status, recent runs, warnings) and
+Run / Setup Audit / Run Log buttons. The review page shows the same numbers in a strip.
+
+**Security notes** — the review page is for `Attendance Admin` / HR roles only;
+mutating endpoints are POST-only; review fields on Employee Checkin are permlevel 2 so
+the app cannot change a punch's review status; the supervisor is always the posting
+user; `after_install` / `after_migrate` copy standard permissions into Custom DocPerm
+so the fixture never locks HR or System Manager out of a doctype.
+
 **Daily photo retention** — `tasks.purge_attendance_photos` deletes attendance face
 photos older than the configured number of days; the check-in row is kept. The window
 is keyed on the check-in's own `time`, so a late-syncing handset earns no extra

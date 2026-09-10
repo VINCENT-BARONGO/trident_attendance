@@ -16,14 +16,29 @@ from trident_attendance.checkin_rules import (
 	refresh_project_reasons,
 	strip_prefixes,
 )
-from trident_attendance.utils import STATUS_PENDING, get_settings, in_scope, join_reasons, split_reasons
+from trident_attendance.utils import (
+	INTERNAL_SOURCE_PREFIX,
+	STATUS_PENDING,
+	get_settings,
+	in_scope,
+	join_reasons,
+	split_reasons,
+)
 
 
 def before_insert(doc, method=None):
+	# Only punches this app creates itself may carry the internal prefix (it bypasses the rules).
+	source = doc.get("custom_app_source") or ""
+	if source.startswith(INTERNAL_SOURCE_PREFIX) and not doc.flags.trident_internal:
+		doc.custom_app_source = "client/" + source[len(INTERNAL_SOURCE_PREFIX) :]
+
 	settings = get_settings()
 	if not in_scope(doc, settings):
 		return
 	doc.skip_auto_attendance = 1
+	doc.attendance = None
+	if not doc.get("custom_client_uid"):
+		doc.custom_client_uid = None  # empty strings would collide on the unique index
 	doc.custom_review_status = STATUS_PENDING
 	doc.custom_hold_reasons = None
 	doc.custom_reviewed_by = None

@@ -16,8 +16,17 @@ def execute(filters=None):
 	return get_columns(), rows
 
 
+LIST_TYPES = {"DocType"}
+
+
 def row(category, record_type, record, problem, fix):
-	return {"category": category, "record_type": record_type, "record": record, "problem": problem, "fix": fix}
+	if record_type in LIST_TYPES:
+		link = f'<a href="/app/{frappe.scrub(record).replace("_", "-")}">{frappe.utils.escape_html(record)}</a>'
+	elif record_type == "Custom Field":
+		link = f'<a href="/app/custom-field/{frappe.utils.quote(record)}">{frappe.utils.escape_html(record)}</a>'
+	else:
+		link = f'<a href="/app/{frappe.scrub(record_type).replace("_", "-")}/{frappe.utils.quote(record)}">{frappe.utils.escape_html(record)}</a>'
+	return {"category": category, "record_type": record_type, "record": link, "problem": problem, "fix": fix}
 
 
 def supervisor_checks():
@@ -111,11 +120,11 @@ def project_checks():
 def site_checks():
 	rows = []
 	if cint(frappe.db.get_single_value("HR Settings", "allow_geolocation_tracking")):
-		rows.append(row(_("Site"), "DocType", "HR Settings", _("Allow Geolocation Tracking is on: hrms rejects check-ins that have no GPS"), _("Switch it off; this app does its own geofence check")))
+		rows.append(row(_("Site"), "HR Settings", "HR Settings", _("Allow Geolocation Tracking is on: hrms rejects check-ins that have no GPS"), _("Switch it off; this app does its own geofence check")))
 
 	tz = frappe.db.get_single_value("System Settings", "time_zone")
 	if tz != EXPECTED_TIMEZONE:
-		rows.append(row(_("Site"), "DocType", "System Settings", _("Time zone is {0}; the app posts handset-local times").format(tz), _("Set System Settings > Time Zone to {0}").format(EXPECTED_TIMEZONE)))
+		rows.append(row(_("Site"), "System Settings", "System Settings", _("Time zone is {0}; the app posts handset-local times").format(tz), _("Set System Settings > Time Zone to {0}").format(EXPECTED_TIMEZONE)))
 
 	has_create = frappe.db.exists("Custom DocPerm", {"parent": "Attendance", "role": "Attendance Marking", "create": 1}) or frappe.db.exists(
 		"DocPerm", {"parent": "Attendance", "role": "Attendance Marking", "create": 1}
@@ -129,7 +138,7 @@ def site_checks():
 
 	settings = frappe.get_cached_doc("Trident Attendance Settings")
 	if not settings.day_cutoff_time:
-		rows.append(row(_("Site"), "DocType", "Trident Attendance Settings", _("Day Cutoff Time is empty"), _("Set it, e.g. 20:00")))
+		rows.append(row(_("Site"), "Trident Attendance Settings", "Trident Attendance Settings", _("Day Cutoff Time is empty"), _("Set it, e.g. 20:00")))
 
 	auto_shifts = frappe.get_all("Shift Type", filters={"enable_auto_attendance": 1}, pluck="name")
 	if auto_shifts and settings.staged_sources == "All sources":
@@ -141,7 +150,7 @@ def get_columns():
 	return [
 		{"label": _("Category"), "fieldname": "category", "fieldtype": "Data", "width": 130},
 		{"label": _("Type"), "fieldname": "record_type", "fieldtype": "Data", "width": 110},
-		{"label": _("Record"), "fieldname": "record", "fieldtype": "Dynamic Link", "options": "record_type", "width": 220},
+		{"label": _("Record"), "fieldname": "record", "fieldtype": "HTML", "width": 240},
 		{"label": _("Problem"), "fieldname": "problem", "fieldtype": "Data", "width": 420},
 		{"label": _("Fix"), "fieldname": "fix", "fieldtype": "Data", "width": 360},
 	]

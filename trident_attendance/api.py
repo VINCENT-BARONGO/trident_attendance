@@ -10,6 +10,7 @@ calling user's own punches and projects.
 
 import base64
 import json
+from datetime import timedelta
 
 import frappe
 from frappe import _
@@ -45,8 +46,13 @@ def _require_supervisor():
 
 def _names(names) -> list[str]:
 	if isinstance(names, str):
-		names = json.loads(names) if names.startswith("[") else [names]
-	return [n for n in (names or []) if n]
+		try:
+			names = json.loads(names) if names.startswith("[") else [names]
+		except ValueError:
+			frappe.throw(_("Invalid selection."))
+	if not isinstance(names, list):
+		frappe.throw(_("Invalid selection."))
+	return [str(n) for n in names if n][:500]
 
 
 def _groups(names) -> list[tuple[str, object]]:
@@ -66,7 +72,7 @@ def _groups(names) -> list[tuple[str, object]]:
 # ---------------------------------------------------------------------------
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def release_checkins(names):
 	"""Release every open punch of the selected employee-days and mark them now."""
 	_require_reviewer()
@@ -81,8 +87,9 @@ def release_checkins(names):
 	return {"ok": True, "results": results, "marked": len([r for r in results if r["status"] == "marked"])}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def reject_checkins(names, reason=None):
+	reason = (reason or "").strip()[:140]
 	_require_reviewer()
 	rejected = 0
 	for name in _names(names):
@@ -99,15 +106,16 @@ def reject_checkins(names, reason=None):
 				"custom_reviewed_by": frappe.session.user,
 				"custom_reviewed_on": now_datetime(),
 			},
-			update_modified=False,
 		)
 		rejected += 1
 	return {"ok": True, "rejected": rejected}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def set_checkin_project(name, project):
 	_require_reviewer()
+	if not frappe.db.exists("Project", project):
+		frappe.throw(_("Project {0} does not exist.").format(project))
 	doc = frappe.get_doc("Employee Checkin", name)
 	if doc.custom_review_status != STATUS_PENDING or doc.attendance:
 		frappe.throw(_("Only check-ins awaiting review can be moved to another project."))
@@ -117,7 +125,7 @@ def set_checkin_project(name, project):
 	return {"ok": True, "hold_reasons": split_reasons(doc.custom_hold_reasons)}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def add_missing_out(name, time):
 	"""Create an OUT punch for the day of the given check-in, then re-evaluate that day."""
 	_require_reviewer()
@@ -127,7 +135,10 @@ def add_missing_out(name, time):
 	if not ref:
 		frappe.throw(_("Check-in {0} not found.").format(name))
 	day = getdate(ref.time)
-	out_time = combine_datetime(day, time) if len(str(time)) <= 8 else get_datetime(time)
+	try:
+		out_time = combine_datetime(day, time) if len(str(time)) <= 8 else get_datetime(time)
+	except Exception:
+		frappe.throw(_("Enter the OUT time as HH:MM."))
 	if out_time <= get_datetime(ref.time):
 		frappe.throw(_("The OUT time must be after the check-in at {0}.").format(ref.time))
 
@@ -142,12 +153,21 @@ def add_missing_out(name, time):
 	return {"ok": True, "result": tasks.finalise_group(ref.employee, day, get_settings())}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def cancel_and_remark(attendance):
 	"""Cancel an Attendance and rebuild it from the day's check-ins."""
 	_require_reviewer()
 	att = frappe.get_doc("Attendance", attendance)
 	employee, day = att.employee, getdate(att.attendance_date)
+	linked = frappe.db.exists("Employee Checkin", {"attendance": att.name})
+	start, end = day_bounds(day)
+	has_punches = frappe.db.exists(
+		"Employee Checkin", {"employee": employee, "time": ["between", [start, end]], **scope_filters()}
+	)
+	if att.leave_type or att.status == "On Leave":
+		frappe.throw(_("{0} is a leave record; cancel it from the Desk if that is intended.").format(att.name))
+	if not (linked or has_punches):
+		frappe.throw(_("{0} has no app check-ins to rebuild from.").format(att.name))
 	if att.docstatus == 1:
 		att.flags.ignore_permissions = True
 		att.cancel()
@@ -155,10 +175,10 @@ def cancel_and_remark(attendance):
 	return {"ok": True, "result": result}
 
 
-@frappe.whitelist()
+@frappe.whitelist(methods=["POST"])
 def process_attendance(include_today=0):
 	_require_reviewer()
-	summary = tasks.finalise_days(force_today=cint(include_today))
+	summary = tasks.finalise_days(force_today=cint(include_today), trigger="Reviewer")
 	return {"ok": True, **summary}
 
 
@@ -191,7 +211,12 @@ def get_my_projects():
 	)
 
 
-@frappe.whitelist()
+MAX_PHOTO_BYTES = 2 * 1024 * 1024
+MAX_PUNCH_AGE_DAYS = 60
+IMAGE_SIGNATURES = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n")
+
+
+@frappe.whitelist(methods=["POST"])
 def sync_checkin(
 	client_uid,
 	employee,
@@ -210,12 +235,24 @@ def sync_checkin(
 ):
 	"""Idempotent single-call ingestion for the mobile app."""
 	_require_supervisor()
-	if not client_uid:
-		frappe.throw(_("client_uid is required."))
+	if log_type not in ("IN", "OUT"):
+		frappe.throw(_("log_type must be IN or OUT."))
+	try:
+		punch_time = get_datetime(time).replace(microsecond=0)
+	except Exception:
+		frappe.throw(_("time must be 'YYYY-MM-DD HH:MM:SS'."))
+	# Older app builds send no uid; derive a stable one so a retry is still a no-op.
+	client_uid = (client_uid or "").strip()[:64] or f"{employee}|{log_type}|{punch_time}"[:64]
+	if punch_time > now_datetime() + timedelta(minutes=10):
+		frappe.throw(_("Check-in time is in the future."))
+	if punch_time < add_days(now_datetime(), -MAX_PUNCH_AGE_DAYS):
+		frappe.throw(_("Check-in is older than {0} days.").format(MAX_PUNCH_AGE_DAYS))
 
+	# A supervisor can only ever see their own punches through the replay lookup.
+	own = {} if is_reviewer() else {"owner": frappe.session.user}
 	existing = frappe.db.get_value(
 		"Employee Checkin",
-		{"custom_client_uid": client_uid},
+		{"custom_client_uid": client_uid, **own},
 		["name", "custom_review_status", "custom_hold_reasons"],
 		as_dict=True,
 	)
@@ -223,7 +260,7 @@ def sync_checkin(
 		# Same punch re-sent without its uid (older app build): treat like a replay too.
 		existing = frappe.db.get_value(
 			"Employee Checkin",
-			{"employee": employee, "log_type": log_type, "time": get_datetime(time).replace(microsecond=0)},
+			{"employee": employee, "log_type": log_type, "time": punch_time, **own},
 			["name", "custom_review_status", "custom_hold_reasons"],
 			as_dict=True,
 		)
@@ -235,7 +272,7 @@ def sync_checkin(
 		{
 			"employee": employee,
 			"log_type": log_type,
-			"time": get_datetime(time),
+			"time": punch_time,
 			"skip_auto_attendance": 1,
 			"custom_client_uid": client_uid,
 			"custom_site_project": custom_site_project,
@@ -245,27 +282,35 @@ def sync_checkin(
 			"custom_face_match_score": flt(custom_face_match_score),
 			"latitude": flt(latitude) or None,
 			"longitude": flt(longitude) or None,
-			"custom_app_source": custom_app_source or "TPL-FieldApp",
+			"custom_app_source": (custom_app_source or "TPL-FieldApp")[:140],
 		}
 	)
 	doc.insert()
 
 	if photo_base64:
 		try:
-			_attach_photo(doc, photo_base64, photo_filename)
+			_attach_photo(doc, photo_base64)
 		except Exception:
+			frappe.clear_messages()
 			frappe.log_error(title=f"trident_attendance: photo attach failed for {doc.name}")
 
 	return _sync_response(doc, duplicate=False)
 
 
-def _attach_photo(doc, photo_base64, filename=None):
-	content = base64.b64decode(photo_base64.split(",", 1)[-1])
+def _attach_photo(doc, photo_base64):
+	# Android Base64.DEFAULT wraps lines; strip all whitespace before validating.
+	raw = "".join(photo_base64.split(",", 1)[-1].split())
+	if len(raw) > MAX_PHOTO_BYTES * 4 // 3 + 4:
+		frappe.throw(_("Photo is larger than {0} MB.").format(MAX_PHOTO_BYTES // (1024 * 1024)))
+	content = base64.b64decode(raw, validate=True)
+	if not content.startswith(IMAGE_SIGNATURES):
+		frappe.throw(_("Photo must be a JPEG or PNG image."))
 	stamp = get_datetime(doc.time).strftime("%Y%m%d_%H%M%S")
+	ext = "png" if content.startswith(IMAGE_SIGNATURES[1]) else "jpg"
 	file_doc = frappe.get_doc(
 		{
 			"doctype": "File",
-			"file_name": filename or f"checkin_{doc.employee}_{stamp}.jpg",
+			"file_name": f"checkin_{doc.employee}_{stamp}.{ext}",
 			"attached_to_doctype": "Employee Checkin",
 			"attached_to_name": doc.name,
 			"attached_to_field": "custom_attendance_photo",
@@ -291,10 +336,17 @@ def _sync_response(row, duplicate: bool) -> dict:
 def get_my_history(from_date=None, to_date=None, project=None):
 	"""The caller's own punches with their review outcome, plus a per-day summary."""
 	_require_supervisor()
-	to_date = getdate(to_date or nowdate())
-	from_date = getdate(from_date) if from_date else add_days(to_date, -14)
-	start, _ = day_bounds(from_date)
-	_, end = day_bounds(to_date)
+	try:
+		to_date = getdate(to_date or nowdate())
+		from_date = getdate(from_date) if from_date else add_days(to_date, -14)
+	except Exception:
+		frappe.throw(_("Dates must be YYYY-MM-DD."))
+	if from_date > to_date:
+		from_date, to_date = to_date, from_date
+	if (to_date - from_date).days > 92:
+		from_date = add_days(to_date, -92)
+	start, _s_end = day_bounds(from_date)
+	_e_start, end = day_bounds(to_date)
 
 	filters = {"time": ["between", [start, end]]}
 	filters.update(scope_filters())

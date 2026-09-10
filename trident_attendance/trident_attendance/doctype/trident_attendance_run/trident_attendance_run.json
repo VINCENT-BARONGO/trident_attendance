@@ -1,0 +1,161 @@
+{
+ "actions": [],
+ "autoname": "format:TAR-{YYYY}-{MM}-{#####}",
+ "creation": "2026-09-10 08:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "run_at",
+  "trigger",
+  "user",
+  "column_break_1",
+  "up_to",
+  "duration_seconds",
+  "counts_section",
+  "days_evaluated",
+  "marked",
+  "held",
+  "column_break_2",
+  "errors",
+  "absent_marked",
+  "details_section",
+  "summary"
+ ],
+ "fields": [
+  {
+   "fieldname": "run_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Run At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "trigger",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Trigger",
+   "options": "Scheduler\nManual\nReviewer\nAPI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "up_to",
+   "fieldtype": "Date",
+   "label": "Days Complete Up To",
+   "read_only": 1
+  },
+  {
+   "fieldname": "duration_seconds",
+   "fieldtype": "Float",
+   "label": "Duration (s)",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "counts_section",
+   "fieldtype": "Section Break",
+   "label": "Counts"
+  },
+  {
+   "fieldname": "days_evaluated",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Employee-days Evaluated",
+   "read_only": 1
+  },
+  {
+   "fieldname": "marked",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Marked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "held",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Held",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "errors",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Errors",
+   "read_only": 1
+  },
+  {
+   "fieldname": "absent_marked",
+   "fieldtype": "Int",
+   "label": "Absent Marked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "details_section",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "description": "Per employee-day results as JSON.",
+   "fieldname": "summary",
+   "fieldtype": "Code",
+   "label": "Summary",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-10 08:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Trident Attendance Run",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Attendance Admin"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager"
+  }
+ ],
+ "sort_field": "run_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "run_at",
+ "track_changes": 0
+}

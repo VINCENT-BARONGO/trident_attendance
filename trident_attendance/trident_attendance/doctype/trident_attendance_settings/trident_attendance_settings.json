@@ -5,6 +5,8 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "monitor_section",
+  "monitor_html",
   "scope_section",
   "staged_sources",
   "day_section",
@@ -36,6 +38,16 @@
   "photo_retention_days"
  ],
  "fields": [
+  {
+   "fieldname": "monitor_section",
+   "fieldtype": "Section Break",
+   "label": "Pipeline Health"
+  },
+  {
+   "fieldname": "monitor_html",
+   "fieldtype": "HTML",
+   "label": "Monitor"
+  },
   {
    "fieldname": "scope_section",
    "fieldtype": "Section Break",

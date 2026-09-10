@@ -6,9 +6,10 @@
 
 {% block style %}
 <style>
-	/* Tokens follow the page Frappe actually rendered (measured at runtime), plus its data-theme. */
+	/* Frappe renders website pages light regardless of the OS setting, so the tokens are switched
+	   at runtime from the page background that was actually painted (plus Frappe's data-theme). */
 	.ar-wrap {
-		--ar-bg: #ffffff; --ar-surface: #f6f7f9; --ar-surface-2: #eef0f3; --ar-border: #e3e6ea; --ar-border-soft: #eff1f4;
+		--ar-bg: #ffffff; --ar-surface: #f6f7f9; --ar-surface-2: #eceff3; --ar-border: #e3e6ea; --ar-border-soft: #eff1f4;
 		--ar-text: #1f2937; --ar-muted: #6b7280; --ar-faint: #9ca3af; --ar-link: #1d4ed8;
 		--ar-ok: #166534; --ar-ok-bg: #dcfce7; --ar-warn: #92400e; --ar-warn-bg: #fef3c7;
 		--ar-bad: #991b1b; --ar-bad-bg: #fee2e2; --ar-info: #1e40af; --ar-info-bg: #dbeafe;
@@ -24,56 +25,66 @@
 
 	.ar-wrap { max-width: 1240px; margin: 0 auto; padding: 1rem 1rem 6rem; color: var(--ar-text); font-size: 14px; }
 	.ar-wrap a { color: var(--ar-link); }
-	.ar-wrap button, .ar-wrap select, .ar-wrap input[type=text] { font: inherit; }
+	.ar-wrap button, .ar-wrap select { font: inherit; }
 	.ar-btn { border: 1px solid var(--ar-border); background: var(--ar-surface); color: var(--ar-text); border-radius: 6px; padding: .3rem .7rem; font-size: .85rem; cursor: pointer; line-height: 1.3; white-space: nowrap; }
 	.ar-btn:hover { background: var(--ar-surface-2); }
 	.ar-btn:disabled { opacity: .45; cursor: default; }
 	.ar-btn.primary { background: var(--ar-primary); border-color: var(--ar-primary); color: var(--ar-primary-text); }
-	.ar-btn.primary:hover { filter: brightness(1.08); }
 	.ar-btn.xs { padding: .15rem .5rem; font-size: .78rem; }
-	.ar-select { background: var(--ar-bg); color: var(--ar-text); border: 1px solid var(--ar-border); border-radius: 6px; padding: .3rem .5rem; font-size: .85rem; max-width: 220px; }
+	.ar-select { background: var(--ar-bg); color: var(--ar-text); border: 1px solid var(--ar-border); border-radius: 6px; padding: .3rem .5rem; font-size: .85rem; max-width: 230px; }
 
-	.ar-top { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; margin-bottom: .75rem; }
+	.ar-top { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; margin-bottom: .6rem; }
 	.ar-top h1 { margin: 0; font-size: 1.35rem; }
 	.ar-tabs { display: flex; gap: .25rem; border: 1px solid var(--ar-border); border-radius: 8px; padding: .15rem; background: var(--ar-surface); }
 	.ar-tabs a { padding: .3rem .8rem; border-radius: 6px; text-decoration: none; color: var(--ar-muted); font-size: .85rem; }
 	.ar-tabs a.on { background: var(--ar-bg); color: var(--ar-text); box-shadow: 0 1px 2px rgba(0,0,0,.08); font-weight: 600; }
 	.ar-desk { margin-left: auto; font-size: .85rem; }
-	.ar-filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+
+	.ar-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .5rem; margin: .25rem 0 .9rem; }
+	.ar-stat { border: 1px solid var(--ar-border); border-radius: 8px; padding: .45rem .7rem; background: var(--ar-surface); }
+	.ar-stat .v { font-size: 1.25rem; font-weight: 600; line-height: 1.2; }
+	.ar-stat .l { color: var(--ar-muted); font-size: .76rem; }
+	.ar-stat .s { color: var(--ar-faint); font-size: .72rem; }
+
+	.ar-filters { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-bottom: .6rem; }
 	.ar-daynav { display: flex; align-items: center; gap: .3rem; font-weight: 600; }
 	.ar-daynav a { text-decoration: none; padding: .1rem .45rem; border: 1px solid var(--ar-border); border-radius: 6px; }
-
-	.ar-summary { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center; color: var(--ar-muted); font-size: .88rem; margin: .25rem 0 .75rem; }
-	.ar-banner { border: 1px solid var(--ar-border); background: var(--ar-surface); border-radius: 8px; padding: .55rem .9rem; font-size: .88rem; margin: 0 0 1rem; }
+	.ar-banner { border: 1px solid var(--ar-border); background: var(--ar-surface); border-radius: 8px; padding: .5rem .9rem; font-size: .86rem; margin: 0 0 .8rem; }
 	.ar-banner.info { border-color: transparent; background: var(--ar-info-bg); color: var(--ar-info); }
 	.ar-banner.warn { border-color: transparent; background: var(--ar-warn-bg); color: var(--ar-warn); }
 
 	.ar-bulk { position: sticky; top: 0; z-index: 5; display: none; gap: .5rem; align-items: center; flex-wrap: wrap; padding: .5rem .75rem; margin: 0 0 .75rem; border: 1px solid var(--ar-border); border-radius: 8px; background: var(--ar-surface); box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 	.ar-bulk.on { display: flex; }
-	#ar-result { font-size: .85rem; margin: .25rem 0 .75rem; min-height: 1.2em; }
+	.ar-toast { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); max-width: min(92vw, 720px); z-index: 50; padding: .6rem .9rem; border-radius: 8px; font-size: .86rem; background: var(--ar-surface-2); color: var(--ar-text); border: 1px solid var(--ar-border); box-shadow: 0 6px 24px rgba(0,0,0,.18); display: none; }
+	.ar-toast.on { display: block; }
+	.ar-toast.ok { border-color: var(--ar-ok); } .ar-toast.warn { border-color: var(--ar-warn); }
 
-	.ar-dayhead { display: flex; align-items: baseline; gap: .6rem; margin: 1.25rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--ar-border); }
+	.ar-dayhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; margin: 1.25rem 0 .5rem; padding-bottom: .3rem; border-bottom: 1px solid var(--ar-border); }
 	.ar-dayhead h2 { font-size: 1rem; margin: 0; }
-	.ar-dayhead .muted { font-size: .85rem; }
+	.ar-projhead { color: var(--ar-muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; margin: .7rem 0 .35rem; }
 
-	.ar-card { border: 1px solid var(--ar-border); border-radius: 10px; margin-bottom: .6rem; background: var(--ar-bg); overflow: hidden; }
+	.ar-card { border: 1px solid var(--ar-border); border-radius: 10px; margin-bottom: .55rem; background: var(--ar-bg); overflow: hidden; }
 	.ar-card.pending { border-left: 4px solid var(--ar-warn); }
 	.ar-card.marked { border-left: 4px solid var(--ar-ok); }
 	.ar-card.rejected { border-left: 4px solid var(--ar-bad); opacity: .8; }
 	.ar-card.released { border-left: 4px solid var(--ar-info); }
-	.ar-chead { display: grid; grid-template-columns: auto 1fr auto; gap: .5rem 1rem; align-items: center; padding: .55rem .8rem; background: var(--ar-surface); }
+	.ar-card.unstaged { border-left: 4px solid var(--ar-faint); }
+	.ar-card:focus-within, .ar-card.focus { box-shadow: 0 0 0 2px var(--ar-primary); }
+	.ar-chead { display: grid; grid-template-columns: auto auto 1fr auto; gap: .5rem .8rem; align-items: center; padding: .5rem .8rem; background: var(--ar-surface); }
+	.ar-avatar { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 1px solid var(--ar-border); background: var(--ar-surface-2); }
+	.ar-avatar.empty { display: inline-flex; align-items: center; justify-content: center; color: var(--ar-faint); font-size: .8rem; }
 	.ar-who { display: flex; flex-wrap: wrap; gap: .3rem .6rem; align-items: baseline; }
-	.ar-who .name { font-weight: 600; font-size: .95rem; }
-	.ar-who .id { color: var(--ar-faint); font-size: .8rem; }
-	.ar-times { display: flex; flex-wrap: wrap; gap: .3rem .9rem; color: var(--ar-muted); font-size: .85rem; }
+	.ar-who .name { font-weight: 600; font-size: .95rem; text-decoration: none; color: var(--ar-text); }
+	.ar-who .id { color: var(--ar-faint); font-size: .75rem; }
+	.ar-times { display: flex; flex-wrap: wrap; gap: .3rem .9rem; color: var(--ar-muted); font-size: .84rem; }
 	.ar-times b { color: var(--ar-text); font-weight: 600; }
 	.ar-cactions { display: flex; gap: .35rem; flex-wrap: wrap; justify-content: flex-end; }
 	.ar-chips { display: flex; flex-wrap: wrap; gap: .3rem; padding: .45rem .8rem 0; }
-	.chip { display: inline-flex; align-items: center; gap: .3rem; padding: .12rem .55rem; border-radius: 6px; font-size: .76rem; background: var(--ar-chip-bg); color: var(--ar-chip-text); border: 1px solid var(--ar-border); cursor: help; }
+	.chip { display: inline-flex; align-items: center; padding: .12rem .55rem; border-radius: 6px; font-size: .76rem; background: var(--ar-chip-bg); color: var(--ar-chip-text); border: 1px solid var(--ar-border); cursor: help; }
 	.chip.block { background: var(--ar-warn-bg); color: var(--ar-warn); border-color: transparent; font-weight: 600; }
 
 	table.ar { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: .35rem; }
-	table.ar th { text-align: left; font-weight: 600; color: var(--ar-muted); padding: .3rem .8rem; white-space: nowrap; font-size: .76rem; text-transform: uppercase; letter-spacing: .02em; }
+	table.ar th { text-align: left; font-weight: 600; color: var(--ar-muted); padding: .3rem .8rem; white-space: nowrap; font-size: .74rem; text-transform: uppercase; letter-spacing: .02em; }
 	table.ar td { border-top: 1px solid var(--ar-border-soft); padding: .35rem .8rem; vertical-align: middle; }
 	.pill { display: inline-block; padding: .08rem .5rem; border-radius: 999px; font-size: .74rem; font-weight: 600; white-space: nowrap; }
 	.pill-in { background: var(--ar-ok-bg); color: var(--ar-ok); }
@@ -83,34 +94,51 @@
 	.pill-state.marked { background: var(--ar-ok-bg); color: var(--ar-ok); }
 	.pill-state.rejected { background: var(--ar-bad-bg); color: var(--ar-bad); }
 	.pill-state.released { background: var(--ar-info-bg); color: var(--ar-info); }
-	.ok { color: var(--ar-ok); font-weight: 600; }
-	.warn { color: var(--ar-warn); font-weight: 600; }
-	.bad { color: var(--ar-bad); font-weight: 600; }
-	.muted { color: var(--ar-faint); }
+	.ok { color: var(--ar-ok); font-weight: 600; } .warn { color: var(--ar-warn); font-weight: 600; } .bad { color: var(--ar-bad); font-weight: 600; } .muted { color: var(--ar-faint); }
 	.ar-scroll { overflow-x: auto; }
 	.ar-empty { color: var(--ar-muted); padding: 2.5rem 1rem; text-align: center; border: 1px dashed var(--ar-border); border-radius: 10px; }
 	.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--ar-border); background: var(--ar-surface); vertical-align: middle; }
+	.thumb-pair { display: inline-flex; gap: .25rem; align-items: center; }
 	details.ar-details { margin-top: 1.5rem; }
 	details.ar-details summary { cursor: pointer; font-weight: 600; font-size: .95rem; }
+	.ar-kbd { color: var(--ar-faint); font-size: .74rem; margin-top: 1rem; }
+	.ar-kbd kbd { border: 1px solid var(--ar-border); border-radius: 3px; padding: 0 .3rem; font-size: .7rem; }
 	@media (max-width: 720px) {
-		.ar-chead { grid-template-columns: auto 1fr; }
+		.ar-chead { grid-template-columns: auto auto 1fr; }
 		.ar-cactions { grid-column: 1 / -1; justify-content: flex-start; }
-		table.ar th:nth-child(6), table.ar td:nth-child(6), table.ar th:nth-child(7), table.ar td:nth-child(7) { display: none; }
+		.col-opt { display: none; }
+		.ar-who .id { display: none; }
 	}
 </style>
 {% endblock %}
 
 {% block page_content %}
-{% set qs = "&project=" ~ project_filter ~ "&supervisor=" ~ supervisor_filter %}
+{% set qs = "&project=" ~ (project_filter|urlencode) ~ "&supervisor=" ~ (supervisor_filter|urlencode) %}
 <div class="ar-wrap" id="ar-wrap">
 
 	<div class="ar-top">
 		<h1>Attendance Review</h1>
 		<nav class="ar-tabs">
-			<a class="{{ 'on' if view == 'queue' }}" href="/attendance-review?view=queue{{ qs }}">To review{% if view != 'queue' %}{% else %} · {{ pending_groups }}{% endif %}</a>
+			<a class="{{ 'on' if view == 'queue' }}" href="/attendance-review?view=queue{{ qs }}">To review{% if view == 'queue' %} · {{ pending_groups }}{% endif %}</a>
 			<a class="{{ 'on' if view == 'day' }}" href="/attendance-review?view=day&date={{ day }}{{ qs }}">By day</a>
 		</nav>
 		<a class="ar-desk" href="/app/field-attendance">Back to Desk &rarr;</a>
+	</div>
+
+	<div class="ar-strip">
+		<div class="ar-stat"><div class="v {{ 'warn' if pending_groups else 'ok' }}">{{ pending_groups }}</div><div class="l">to review</div><div class="s">last {{ queue_days }} days</div></div>
+		<div class="ar-stat"><div class="v">{{ stats.yesterday.days }}</div><div class="l">employees punched {{ stats.yesterday.label|e }}</div><div class="s">{{ stats.yesterday.punches }} punches</div></div>
+		<div class="ar-stat"><div class="v ok">{{ stats.yesterday.marked }}</div><div class="l">marked for {{ stats.yesterday.label|e }}</div><div class="s">{{ stats.yesterday.pending }} held · {{ stats.yesterday.rejected }} rejected</div></div>
+		<div class="ar-stat"><div class="v">{{ stats.today_punches }}</div><div class="l">punches today</div><div class="s">complete after {{ cutoff }}</div></div>
+		<div class="ar-stat">
+			{% if stats.last_run %}
+				<div class="v {{ 'bad' if stats.last_run.errors }}">{{ frappe.format(stats.last_run.run_at, {"fieldtype": "Datetime"})|e }}</div>
+				<div class="l">last processing run ({{ stats.last_run.trigger|e }})</div>
+				<div class="s">{{ stats.last_run.marked }} marked · {{ stats.last_run.held }} held · {{ stats.last_run.errors }} errors</div>
+			{% else %}
+				<div class="v warn">never</div><div class="l">last processing run</div><div class="s">the hourly job has not recorded a run yet</div>
+			{% endif %}
+		</div>
 	</div>
 
 	<form class="ar-filters" method="get" action="/attendance-review">
@@ -119,7 +147,7 @@
 			<input type="hidden" name="date" value="{{ day }}">
 			<span class="ar-daynav">
 				<a href="/attendance-review?view=day&date={{ prev_day }}&status={{ status_filter }}{{ qs }}" title="Previous day">&larr;</a>
-				<span>{{ frappe.format(day, {"fieldtype": "Date"}) }} <span class="muted" style="font-weight:400">{{ day.strftime("%A") }}</span></span>
+				<span>{{ frappe.format(day, {"fieldtype": "Date"})|e }} <span class="muted" style="font-weight:400">{{ day.strftime("%A") }}</span></span>
 				{% if day < today %}<a href="/attendance-review?view=day&date={{ next_day }}&status={{ status_filter }}{{ qs }}" title="Next day">&rarr;</a>{% endif %}
 				{% if day != today %}<a href="/attendance-review?view=day&status={{ status_filter }}{{ qs }}" style="font-size:.8rem">today</a>{% endif %}
 			</span>
@@ -129,98 +157,99 @@
 		{% endif %}
 		<select class="ar-select" name="project" title="Project">
 			<option value="">All projects</option>
-			{% for p in projects %}<option value="{{ p.name }}" {{ "selected" if p.name == project_filter }}>{{ p.project_name or p.name }}</option>{% endfor %}
+			{% for p in projects %}<option value="{{ p.name|e }}" {{ "selected" if p.name == project_filter }}>{{ (p.project_name or p.name)|e }}</option>{% endfor %}
 		</select>
 		<select class="ar-select" name="supervisor" title="Posted by">
 			<option value="">All supervisors</option>
-			{% for u in supervisors %}<option value="{{ u }}" {{ "selected" if u == supervisor_filter }}>{{ u }}</option>{% endfor %}
+			{% for s in supervisors %}<option value="{{ s.user|e }}" {{ "selected" if s.user == supervisor_filter }}>{{ s.full_name|e }}</option>{% endfor %}
 		</select>
 		<button class="ar-btn" type="submit">Apply</button>
 		{% if can_process %}
 			<span style="flex:1"></span>
-			<label style="font-size:.82rem;margin:0;color:var(--ar-muted)"><input type="checkbox" id="ar-include-today"> include today</label>
-			<button class="ar-btn" type="button" id="ar-process" title="Evaluate every complete day now instead of waiting for the hourly job">Run processing</button>
+			<button class="ar-btn" type="button" id="ar-process" data-today="0" title="Evaluate every complete day now instead of waiting for the hourly job">Run processing</button>
+			<button class="ar-btn" type="button" id="ar-process-today" data-today="1" title="Also treat today as complete">…incl. today</button>
 		{% endif %}
 	</form>
 
-	{% if view == "queue" %}
-		<div class="ar-summary">
-			<span><strong class="warn">{{ pending_groups }}</strong> employee-day{{ "s" if pending_groups != 1 }} waiting for review (last {{ queue_days }} days)</span>
-			<span>· complete up to {{ frappe.format(complete_up_to, {"fieldtype": "Date"}) }}; today counts after {{ cutoff }}</span>
-			{% if not auto_release %}<span class="warn">· automatic release is off</span>{% endif %}
-		</div>
-	{% else %}
+	{% if view == "day" %}
 		{% if day_complete %}
-			<div class="ar-banner info">This day is complete. {% if auto_release %}Clean days are marked automatically every hour; only held days need you.{% else %}Automatic release is off — every day needs a reviewer.{% endif %}</div>
+			<div class="ar-banner info">This day is complete{% if not auto_release %} — automatic release is off, every day needs a reviewer{% endif %}.</div>
 		{% else %}
-			<div class="ar-banner warn">Today's check-ins are still coming in. They are treated as complete after {{ cutoff }}, or when you run processing with "include today".</div>
+			<div class="ar-banner warn">Today's check-ins are still coming in; they count as complete after {{ cutoff }} or when you run processing "incl. today".</div>
 		{% endif %}
 	{% endif %}
 
 	{% if can_process %}
 	<div class="ar-bulk" id="ar-bulk">
 		<span id="ar-count" style="font-size:.85rem"></span>
-		<button class="ar-btn primary" id="ar-release">Release &amp; mark</button>
-		<button class="ar-btn" id="ar-reject">Reject</button>
+		<button class="ar-btn primary" id="ar-release">Release &amp; mark days</button>
+		<button class="ar-btn" id="ar-reject">Reject punches</button>
 		<select class="ar-select" id="ar-project-select">
-			<option value="">Move to project…</option>
-			{% for p in projects %}<option value="{{ p.name }}">{{ p.project_name or p.name }} ({{ p.name }})</option>{% endfor %}
+			<option value="">Move punches to project…</option>
+			{% for p in projects %}<option value="{{ p.name|e }}">{{ (p.project_name or p.name)|e }} ({{ p.name|e }})</option>{% endfor %}
 		</select>
 		<button class="ar-btn" id="ar-set-project" disabled>Move</button>
-		<button class="ar-btn" id="ar-clear" style="margin-left:auto">Clear selection</button>
+		<button class="ar-btn" id="ar-clear" style="margin-left:auto">Clear</button>
 	</div>
 	{% else %}
-	<div class="ar-banner">You have read access only — releasing, rejecting and processing need the Attendance Admin role.</div>
+	<div class="ar-banner">Read-only view — releasing, rejecting and processing need the Attendance Admin role.</div>
 	{% endif %}
-	<div id="ar-result" class="muted"></div>
 
 	{% if not days %}
 		<div class="ar-empty">
-			{% if view == "queue" %}Nothing to review. Clean days are marked automatically; held days will appear here.{% else %}No {{ status_filter.lower() if status_filter != "All" else "" }} check-ins on this day.{% endif %}
+			{% if view == "queue" %}Nothing to review. Clean days are marked automatically; held days appear here.{% else %}No {{ status_filter.lower() if status_filter != "All" else "" }} check-ins on this day.{% endif %}
 		</div>
 	{% endif %}
 
 	{% for d in days %}
 		{% if view == "queue" or days|length > 1 %}
 		<div class="ar-dayhead">
-			<h2>{{ d.label }}</h2><span class="muted">{{ d.weekday }} · {{ d.pending }} to review</span>
+			<h2>{{ d.label|e }}</h2><span class="muted">{{ d.weekday }} · {{ d.pending }} to review{% if d.projects %} · {{ d.projects|join(", ")|e }}{% endif %}</span>
 			<a class="muted" style="margin-left:auto;font-size:.8rem" href="/attendance-review?view=day&date={{ d.date }}{{ qs }}">open day</a>
 		</div>
 		{% endif %}
 
+		{% set ns = namespace(project=None) %}
 		{% for g in d.groups %}
-		<div class="ar-card {{ g.state.lower() }}" data-employee="{{ g.employee }}" data-date="{{ g.date }}">
+		{% if view == "queue" and g.state == "Pending" and g.project_label != ns.project %}
+			{% set ns.project = g.project_label %}
+			<div class="ar-projhead">{{ (g.project_label or "No project")|e }}</div>
+		{% endif %}
+		<div class="ar-card {{ g.state.lower() }}" data-employee="{{ g.employee|e }}" data-date="{{ g.date }}" tabindex="0">
 			<div class="ar-chead">
 				<div>
 					{% if can_process and g.pending_names %}<input type="checkbox" class="ar-pick-group" title="Select this day">{% else %}<span style="display:inline-block;width:13px"></span>{% endif %}
 				</div>
 				<div>
+					{% if g.image %}<img class="ar-avatar" src="{{ g.image|e }}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ar-avatar empty',textContent:'?'}))">{% else %}<span class="ar-avatar empty" title="No profile photo on the Employee record">?</span>{% endif %}
+				</div>
+				<div>
 					<div class="ar-who">
-						<span class="name">{{ g.employee_name }}</span>
-						<span class="id">{{ g.employee }}</span>
+						<a class="name" href="/app/employee/{{ g.employee|urlencode }}">{{ g.employee_name|e }}</a>
+						<span class="id">{{ g.employee|e }}</span>
 						<span class="pill pill-state {{ g.state.lower() }}">{{ g.state }}</span>
 					</div>
 					<div class="ar-times">
-						<span>{% if g.projects %}<b>{{ g.projects|join(", ") }}</b>{% else %}<span class="bad">no project</span>{% endif %}</span>
+						<span>{% if g.projects %}<b>{{ g.project_label|e }}</b>{% else %}<span class="bad">no project</span>{% endif %}</span>
 						<span>IN {% if g.first_in %}<b>{{ g.first_in.time_str }}</b>{% else %}<span class="bad">—</span>{% endif %}</span>
 						<span>OUT {% if g.last_out %}<b>{{ g.last_out.time_str }}</b>{% else %}<span class="warn">—</span>{% endif %}</span>
 						{% if g.hours is not none %}<span><b>{{ g.hours }}</b> h</span>{% endif %}
-						{% if g.supervisors %}<span>by {{ g.supervisors|join(", ") }}</span>{% elif g.owners %}<span>posted by {{ g.owners|join(", ") }}</span>{% endif %}
+						{% if g.supervisor_label %}<span>by {{ g.supervisor_label|e }}</span>{% endif %}
 					</div>
 				</div>
 				<div class="ar-cactions">
-					{% if g.attendance %}<a class="ar-btn xs" href="/app/attendance/{{ g.attendance }}">{{ g.attendance }}</a>{% endif %}
+					{% if g.attendance %}<a class="ar-btn xs" href="/app/attendance/{{ g.attendance|urlencode }}">{{ g.attendance|e }}</a>{% endif %}
 					{% if can_process %}
 						{% if g.missing_out and g.add_out_ref and g.state == "Pending" %}
-							<button class="ar-btn xs ar-add-out" data-ref="{{ g.add_out_ref }}" data-name="{{ g.employee_name }}">Add OUT</button>
+							<button class="ar-btn xs ar-add-out" data-ref="{{ g.add_out_ref|e }}" data-name="{{ g.employee_name|e }}" data-suggest="{{ g.suggested_out|e }}">Add OUT {{ g.suggested_out|e }}</button>
 						{% endif %}
 						{% if g.existing_attendance %}
-							<button class="ar-btn xs ar-remark" data-att="{{ g.existing_attendance }}" data-name="{{ g.employee_name }}">Cancel &amp; re-mark</button>
+							<button class="ar-btn xs ar-remark" data-att="{{ g.existing_attendance|e }}" data-name="{{ g.employee_name|e }}">Cancel &amp; re-mark</button>
 						{% endif %}
 						{% if g.state == "Pending" and g.pending_names %}
-							<button class="ar-btn xs ar-reject-one" data-names='{{ g.pending_names|tojson }}' data-name="{{ g.employee_name }}">Reject</button>
-							{% if not g.missing_out %}
-							<button class="ar-btn xs primary ar-release-one" data-names='{{ g.pending_names|tojson }}' data-name="{{ g.employee_name }}">Release &amp; mark</button>
+							<button class="ar-btn xs ar-reject-one" data-names='{{ g.pending_names|tojson }}' data-name="{{ g.employee_name|e }}">Reject</button>
+							{% if g.can_release %}
+							<button class="ar-btn xs primary ar-release-one" data-names='{{ g.pending_names|tojson }}' data-name="{{ g.employee_name|e }}">Release &amp; mark</button>
 							{% endif %}
 						{% endif %}
 					{% endif %}
@@ -228,7 +257,7 @@
 			</div>
 			{% if g.reasons %}
 			<div class="ar-chips">
-				{% for r in g.reasons %}<span class="chip {{ 'block' if r.blocking }}" title="{{ r.hint }}">{{ r.text }}</span>{% endfor %}
+				{% for r in g.reasons %}<span class="chip {{ 'block' if r.blocking }}" title="{{ r.hint|e }}">{{ r.text|e }}</span>{% endfor %}
 			</div>
 			{% endif %}
 			<div class="ar-scroll">
@@ -236,31 +265,39 @@
 				<thead>
 					<tr>
 						{% if can_process %}<th style="width:1.5rem"></th>{% endif %}
-						<th>Time</th><th>Type</th><th>Project</th><th>Face</th><th>Distance</th><th>Photo</th><th>Status</th>
+						<th>Time</th><th>Type</th><th>Project</th><th>Face</th><th class="col-opt">Distance</th><th class="col-opt">Photo</th><th>Status</th>
 					</tr>
 				</thead>
 				<tbody>
 				{% for r in g.punches %}
 					<tr>
-						{% if can_process %}<td>{% if r.is_pending %}<input type="checkbox" class="ar-pick" value="{{ r.name }}" data-employee="{{ g.employee }}" data-date="{{ g.date }}">{% endif %}</td>{% endif %}
-						<td><a href="/app/employee-checkin/{{ r.name }}" title="{{ r.name }}">{{ r.time_str }}</a></td>
+						{% if can_process %}<td>{% if r.is_pending %}<input type="checkbox" class="ar-pick" value="{{ r.name|e }}" data-employee="{{ g.employee|e }}" data-date="{{ g.date }}">{% endif %}</td>{% endif %}
+						<td><a href="/app/employee-checkin/{{ r.name|urlencode }}" title="{{ r.name|e }}">{{ r.time_str }}</a></td>
 						<td><span class="pill {{ 'pill-in' if r.log_type == 'IN' else 'pill-out' }}">{{ r.log_type or "—" }}</span></td>
-						<td>{{ r.custom_site_project or "—" }}</td>
+						<td>{{ r.custom_site_project|e if r.custom_site_project else "—" }}</td>
 						<td>
 							{% if r.custom_face_match_result == "Matched" %}<span class="ok">Matched</span>
 							{% elif r.custom_face_match_result == "No Match" %}<span class="bad">No Match</span>
-							{% elif r.custom_face_match_result %}<span class="warn">{{ r.custom_face_match_result }}</span>
+							{% elif r.custom_face_match_result %}<span class="warn">{{ r.custom_face_match_result|e }}</span>
 							{% else %}<span class="muted">—</span>{% endif %}
 							{% if r.custom_face_match_score %}<span class="muted"> {{ "%.0f"|format(r.custom_face_match_score * 100) }}%</span>{% endif %}
 						</td>
-						<td>{% if r.custom_distance_from_site is not none %}{{ "%.0f"|format(r.custom_distance_from_site) }} m{% else %}<span class="muted">—</span>{% endif %}</td>
-						<td>{% if r.custom_attendance_photo %}<a href="{{ r.custom_attendance_photo }}" target="_blank" rel="noopener"><img class="thumb" src="{{ r.custom_attendance_photo }}" alt="" onerror="this.parentNode.replaceWith(document.createTextNode('—'))"></a>{% else %}<span class="muted">—</span>{% endif %}</td>
+						<td class="col-opt">{% if r.custom_distance_from_site %}{{ "%.0f"|format(r.custom_distance_from_site) }} m{% else %}<span class="muted">—</span>{% endif %}</td>
+						<td class="col-opt">
+							{% if r.custom_attendance_photo and (r.custom_attendance_photo.startswith('/files/') or r.custom_attendance_photo.startswith('/private/files/')) %}
+								<span class="thumb-pair">
+									<a href="{{ r.custom_attendance_photo|e }}" target="_blank" rel="noopener"><img class="thumb" src="{{ r.custom_attendance_photo|e }}" alt="" onerror="this.parentNode.replaceWith(document.createTextNode('—'))"></a>
+									{% if r.custom_face_match_result == "No Match" and g.image %}<span class="muted">vs</span><img class="thumb" src="{{ g.image|e }}" alt="" title="Profile photo" onerror="this.remove()">{% endif %}
+								</span>
+							{% else %}<span class="muted">—</span>{% endif %}
+						</td>
 						<td>
-							{% if r.attendance %}<a href="/app/attendance/{{ r.attendance }}">Marked</a>
+							{% if r.attendance %}<a href="/app/attendance/{{ r.attendance|urlencode }}">Marked</a>
 							{% elif r.custom_review_status == "Pending Review" %}<span class="warn">Pending</span>
 							{% elif r.custom_review_status == "Rejected" %}<span class="bad">Rejected</span>
-							{% else %}<span class="ok">{{ r.custom_review_status }}</span>{% endif %}
-							{% if r.custom_reviewed_by %}<span class="muted" title="{{ r.custom_reviewed_on }}"> · {{ r.custom_reviewed_by.split('@')[0] }}</span>{% endif %}
+							{% elif r.custom_review_status %}<span class="ok">{{ r.custom_review_status|e }}</span>
+							{% else %}<span class="muted">Unstaged</span>{% endif %}
+							{% if r.custom_reviewed_by %}<span class="muted" title="{{ r.custom_reviewed_on }}"> · {{ r.custom_reviewed_by.split('@')[0]|e }}</span>{% endif %}
 						</td>
 					</tr>
 				{% endfor %}
@@ -271,7 +308,7 @@
 		{% endfor %}
 	{% endfor %}
 
-	{% if view == "day" and attendance %}
+	{% if view == "day" and (attendance_present or attendance_leave) %}
 	<details class="ar-details" {{ "open" if attendance_present }}>
 		<summary>Attendance for this day <span class="muted" style="font-weight:400">— {{ attendance_present|length }} marked{% if attendance_leave %}, {{ attendance_leave|length }} on leave{% endif %}</span></summary>
 		<div class="ar-scroll">
@@ -280,17 +317,17 @@
 			<tbody>
 			{% for a in attendance_present %}
 				<tr>
-					<td>{{ a.employee_name }}</td>
-					<td>{% if a.status == "Present" %}<span class="ok">Present</span>{% elif a.status == "Absent" %}<span class="bad">Absent</span>{% else %}<span class="warn">{{ a.status }}</span>{% endif %}</td>
-					<td>{{ a.custom_project or "—" }}</td>
+					<td>{{ (a.employee_name or a.employee)|e }}</td>
+					<td>{% if a.status == "Present" %}<span class="ok">Present</span>{% elif a.status == "Absent" %}<span class="bad">Absent</span>{% else %}<span class="warn">{{ a.status|e }}</span>{% endif %}</td>
+					<td>{{ a.custom_project|e if a.custom_project else "—" }}</td>
 					<td>{{ a.in_time.strftime("%H:%M") if a.in_time else "—" }}</td>
 					<td>{{ a.out_time.strftime("%H:%M") if a.out_time else "—" }}</td>
 					<td>{{ a.working_hours or 0 }}</td>
-					<td><a href="/app/attendance/{{ a.name }}">{{ a.name }}</a></td>
+					<td><a href="/app/attendance/{{ a.name|urlencode }}">{{ a.name|e }}</a></td>
 				</tr>
 			{% endfor %}
 			{% if attendance_leave %}
-				<tr><td colspan="7" class="muted">On leave: {{ attendance_leave|map(attribute="employee_name")|join(", ") }}</td></tr>
+				<tr><td colspan="7" class="muted">On leave: {{ attendance_leave|map(attribute="employee_name")|join(", ")|e }}</td></tr>
 			{% endif %}
 			</tbody>
 		</table>
@@ -298,11 +335,14 @@
 	</details>
 	{% endif %}
 
+	{% if can_process and days %}
+	<div class="ar-kbd"><kbd>J</kbd>/<kbd>K</kbd> next/previous day · <kbd>R</kbd> release · <kbd>X</kbd> reject · <kbd>O</kbd> add OUT · <kbd>Space</kbd> select</div>
+	{% endif %}
+	<div class="ar-toast" id="ar-toast"></div>
 </div>
 
 <script>
 (function () {
-	// Match the theme Frappe actually rendered: measure the page background instead of trusting the OS setting.
 	const wrap = document.getElementById("ar-wrap");
 	function luminance(color) {
 		const m = color && color.match(/\d+(\.\d+)?/g);
@@ -311,30 +351,41 @@
 		return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255;
 	}
 	function applyTheme() {
-		const bodyBg = getComputedStyle(document.body).backgroundColor;
-		const htmlBg = getComputedStyle(document.documentElement).backgroundColor;
-		const lum = Math.min(luminance(bodyBg), luminance(htmlBg));
+		const lum = Math.min(luminance(getComputedStyle(document.body).backgroundColor), luminance(getComputedStyle(document.documentElement).backgroundColor));
 		const dark = document.documentElement.getAttribute("data-theme") === "dark" || lum < 0.5;
 		wrap.setAttribute("data-ar-theme", dark ? "dark" : "light");
 	}
 	applyTheme();
 	new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
+
+	// Keep the scroll position and last message across the reload that follows every action.
+	try {
+		const saved = sessionStorage.getItem("ar-scroll");
+		if (saved) { window.scrollTo(0, parseInt(saved, 10) || 0); sessionStorage.removeItem("ar-scroll"); }
+		const msg = sessionStorage.getItem("ar-msg");
+		if (msg) { sessionStorage.removeItem("ar-msg"); const t = document.getElementById("ar-toast"); const [cls, text] = JSON.parse(msg); t.className = "ar-toast on " + cls; t.textContent = text; setTimeout(() => t.classList.remove("on"), 9000); }
+	} catch (e) {}
 })();
 
 frappe.ready(function () {
-	const out = document.getElementById("ar-result");
+	const toast = document.getElementById("ar-toast");
 	const bulk = document.getElementById("ar-bulk");
+	const procBtns = [document.getElementById("ar-process"), document.getElementById("ar-process-today")].filter(Boolean);
 	if (!bulk) return;
 	const relBtn = document.getElementById("ar-release");
 	const rejBtn = document.getElementById("ar-reject");
 	const projSel = document.getElementById("ar-project-select");
 	const projBtn = document.getElementById("ar-set-project");
-	const procBtn = document.getElementById("ar-process");
 	const countEl = document.getElementById("ar-count");
+	let busy = false;
 
 	const picks = () => Array.from(document.querySelectorAll(".ar-pick:checked")).map(c => c.value);
-	function say(cls, text) { out.className = cls; out.textContent = text; out.scrollIntoView({ block: "nearest" }); }
-	function reload(delay) { setTimeout(() => window.location.reload(), delay || 900); }
+	const dayKeys = () => new Set(Array.from(document.querySelectorAll(".ar-pick:checked")).map(c => c.dataset.employee + "|" + c.dataset.date));
+	function say(cls, text) { toast.className = "ar-toast on " + cls; toast.textContent = text; }
+	function reloadWith(cls, text) {
+		try { sessionStorage.setItem("ar-scroll", String(window.scrollY)); sessionStorage.setItem("ar-msg", JSON.stringify([cls, text])); } catch (e) {}
+		setTimeout(() => window.location.reload(), 350);
+	}
 	function summarise(results) {
 		return (results || []).map(r => {
 			const who = r.employee || "";
@@ -345,9 +396,9 @@ frappe.ready(function () {
 		}).join(" | ");
 	}
 	function sync() {
-		const n = picks().length;
+		const n = picks().length, d = dayKeys().size;
 		bulk.classList.toggle("on", n > 0);
-		countEl.textContent = n ? `${n} check-in${n === 1 ? "" : "s"} selected` : "";
+		countEl.textContent = n ? `${n} punch${n === 1 ? "" : "es"} on ${d} day${d === 1 ? "" : "s"} selected` : "";
 		projBtn.disabled = n === 0 || !projSel.value;
 	}
 	document.querySelectorAll(".ar-pick").forEach(c => c.addEventListener("change", sync));
@@ -362,73 +413,90 @@ frappe.ready(function () {
 	});
 
 	function call(method, args, onOk) {
+		if (busy) return;
+		busy = true;
 		say("muted", "Working…");
 		frappe.call({
-			method, args,
-			callback: r => onOk(r.message || {}),
+			method, args, type: "POST",
+			callback: r => { if (r.exc) { say("warn", "Failed — " + (r._server_messages ? JSON.parse(r._server_messages).map(m => { try { return JSON.parse(m).message; } catch (e) { return m; } }).join(" ") : "see the browser console.")); return; } onOk(r.message || {}); },
 			error: () => say("warn", "Failed — see the browser console."),
+			always: () => { busy = false; },
 		});
 	}
 	function release(names) {
 		call("trident_attendance.api.release_checkins", { names: JSON.stringify(names) }, m => {
-			say(m.marked ? "ok" : "warn", summarise(m.results) || m.message || "Nothing released.");
-			reload(1600);
+			reloadWith(m.marked ? "ok" : "warn", summarise(m.results) || m.message || "Nothing released.");
 		});
 	}
 	function reject(names, label) {
 		const reason = window.prompt(`Reject ${label}. Reason:`);
 		if (reason === null) return;
 		call("trident_attendance.api.reject_checkins", { names: JSON.stringify(names), reason }, m => {
-			say("ok", `${m.rejected} check-in(s) rejected. Reloading…`); reload();
+			reloadWith("ok", `${m.rejected} check-in(s) rejected.`);
+		});
+	}
+	function addOut(btn) {
+		const time = window.prompt(`OUT time for ${btn.dataset.name} (HH:MM):`, btn.dataset.suggest || "17:00");
+		if (!time) return;
+		call("trident_attendance.api.add_missing_out", { name: btn.dataset.ref, time: time.length === 5 ? time + ":00" : time }, m => {
+			reloadWith("ok", "OUT added. " + summarise([m.result || {}]));
 		});
 	}
 
 	relBtn.addEventListener("click", () => { const n = picks(); if (n.length) release(n); });
 	rejBtn.addEventListener("click", () => { const n = picks(); if (n.length) reject(n, `${n.length} check-in(s)`); });
-	document.querySelectorAll(".ar-release-one").forEach(b => b.addEventListener("click", function () {
-		release(JSON.parse(this.dataset.names));
-	}));
-	document.querySelectorAll(".ar-reject-one").forEach(b => b.addEventListener("click", function () {
-		reject(JSON.parse(this.dataset.names), `${this.dataset.name}'s day`);
+	document.querySelectorAll(".ar-release-one").forEach(b => b.addEventListener("click", function () { release(JSON.parse(this.dataset.names)); }));
+	document.querySelectorAll(".ar-reject-one").forEach(b => b.addEventListener("click", function () { reject(JSON.parse(this.dataset.names), `${this.dataset.name}'s day`); }));
+	document.querySelectorAll(".ar-add-out").forEach(b => b.addEventListener("click", function () { addOut(this); }));
+	document.querySelectorAll(".ar-remark").forEach(b => b.addEventListener("click", function () {
+		if (!window.confirm(`Cancel ${this.dataset.att} for ${this.dataset.name} and rebuild it from the check-ins?`)) return;
+		call("trident_attendance.api.cancel_and_remark", { attendance: this.dataset.att }, m => { reloadWith("ok", summarise([m.result || {}])); });
 	}));
 
 	projBtn.addEventListener("click", function () {
-		const names = picks(); const project = projSel.value; if (!names.length || !project) return;
-		projBtn.disabled = true;
+		const names = picks(); const project = projSel.value; if (!names.length || !project || busy) return;
+		busy = true; say("muted", "Moving…");
 		let i = 0;
 		(function next() {
-			if (i >= names.length) { say("ok", `${names.length} check-in(s) moved to ${project}. Reloading…`); return reload(); }
+			if (i >= names.length) { busy = false; return reloadWith("ok", `${names.length} check-in(s) moved to ${project}.`); }
 			frappe.call({
-				method: "trident_attendance.api.set_checkin_project",
+				method: "trident_attendance.api.set_checkin_project", type: "POST",
 				args: { name: names[i++], project },
-				callback: next,
-				error: () => say("warn", "Failed — see the browser console."),
+				callback: r => { if (r.exc) { busy = false; say("warn", "Move failed — see the browser console."); return; } next(); },
+				error: () => { busy = false; say("warn", "Move failed — see the browser console."); },
 			});
 		})();
 	});
 
-	document.querySelectorAll(".ar-add-out").forEach(b => b.addEventListener("click", function () {
-		const time = window.prompt(`OUT time for ${this.dataset.name} (HH:MM):`, "17:00");
-		if (!time) return;
-		call("trident_attendance.api.add_missing_out", { name: this.dataset.ref, time: time.length === 5 ? time + ":00" : time }, m => {
-			say("ok", "OUT added. " + summarise([m.result || {}])); reload(1600);
+	procBtns.forEach(btn => btn.addEventListener("click", function () {
+		procBtns.forEach(b => { b.disabled = true; });
+		call("trident_attendance.api.process_attendance", { include_today: this.dataset.today }, m => {
+			reloadWith(m.errors ? "warn" : "ok", `Processed up to ${m.up_to}: ${m.days} employee-day(s) evaluated, ${m.marked} marked, ${m.held} held, ${m.errors} error(s)` + (m.absent !== undefined ? `, ${m.absent} marked absent` : "") + ".");
 		});
+		setTimeout(() => procBtns.forEach(b => { b.disabled = false; }), 4000);
 	}));
 
-	document.querySelectorAll(".ar-remark").forEach(b => b.addEventListener("click", function () {
-		if (!window.confirm(`Cancel ${this.dataset.att} for ${this.dataset.name} and rebuild it from the check-ins?`)) return;
-		call("trident_attendance.api.cancel_and_remark", { attendance: this.dataset.att }, m => {
-			say("ok", summarise([m.result || {}])); reload(1600);
-		});
-	}));
-
-	if (procBtn) procBtn.addEventListener("click", function () {
-		procBtn.disabled = true;
-		const includeToday = document.getElementById("ar-include-today").checked ? 1 : 0;
-		call("trident_attendance.api.process_attendance", { include_today: includeToday }, m => {
-			say(m.marked ? "ok" : "muted", `Processed up to ${m.up_to}: ${m.days} day(s) evaluated, ${m.marked} marked, ${m.held} held, ${m.errors} error(s)` + (m.absent !== undefined ? `, ${m.absent} marked absent` : "") + ". Reloading…");
-			reload(1800);
-		});
+	// Keyboard flow over the pending cards.
+	const cards = Array.from(document.querySelectorAll(".ar-card.pending"));
+	let idx = -1;
+	function focusCard(i) {
+		if (!cards.length) return;
+		idx = Math.max(0, Math.min(cards.length - 1, i));
+		cards.forEach(c => c.classList.remove("focus"));
+		cards[idx].classList.add("focus");
+		cards[idx].scrollIntoView({ block: "center", behavior: "smooth" });
+	}
+	document.addEventListener("keydown", function (e) {
+		if (e.target.matches("input, select, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+		const card = idx >= 0 ? cards[idx] : null;
+		switch (e.key.toLowerCase()) {
+			case "j": focusCard(idx + 1); e.preventDefault(); break;
+			case "k": focusCard(idx - 1); e.preventDefault(); break;
+			case " ": if (card) { const g = card.querySelector(".ar-pick-group"); if (g) { g.checked = !g.checked; g.dispatchEvent(new Event("change")); } e.preventDefault(); } break;
+			case "r": if (card) { const b = card.querySelector(".ar-release-one"); if (b) b.click(); } break;
+			case "x": if (card) { const b = card.querySelector(".ar-reject-one"); if (b) b.click(); } break;
+			case "o": if (card) { const b = card.querySelector(".ar-add-out"); if (b) b.click(); } break;
+		}
 	});
 });
 </script>
