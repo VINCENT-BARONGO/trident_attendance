@@ -461,7 +461,8 @@ def get_project_report(from_date=None, to_date=None, projects=None):
 
 	visible = _report_projects()
 	visible_names = [p.name for p in visible]
-	requested = _names(projects)
+	# No projects (the app's "All projects") means every visible project.
+	requested = _names(projects) if projects else []
 	denied = sorted(set(requested) - set(visible_names))
 	if denied:
 		frappe.throw(_("You are not listed on {0}.").format(", ".join(denied)), frappe.PermissionError)
