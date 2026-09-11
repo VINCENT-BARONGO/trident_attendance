@@ -20,6 +20,7 @@ from trident_attendance.utils import (
 	STATUS_REJECTED,
 	assigned_projects,
 	day_bounds,
+	is_viewer,
 	join_reasons,
 	scope_filters,
 	split_reasons,
@@ -112,9 +113,14 @@ def evaluate_project(doc, settings) -> list[str]:
 		return []
 
 	reasons = []
-	owner = doc.get("owner") or frappe.session.user
+	# The supervisor is whoever posted the punch, unless a trusted account (reviewer/HR, e.g.
+	# the attendance hub relaying a phone punch) named one in custom_logged_by, as the
+	# controller override also allows only for trusted posters.
 	# Assigned = Project > Allowed Users (the live site's custom table) or Project > Users.
-	if owner not in ("Administrator",) and project not in assigned_projects(owner):
+	supervisor = doc.get("owner") or frappe.session.user
+	if doc.get("custom_logged_by") and is_viewer():
+		supervisor = frappe.db.get_value("Employee", doc.custom_logged_by, "user_id") or supervisor
+	if supervisor not in ("Administrator",) and project not in assigned_projects(supervisor):
 		reasons.append(NOT_ALLOWED_ON_PROJECT)
 
 	lat, lon, radius = frappe.db.get_value(

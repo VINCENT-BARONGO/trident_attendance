@@ -236,8 +236,14 @@ def sync_checkin(
 	custom_app_source=None,
 	photo_base64=None,
 	photo_filename=None,
+	custom_logged_by=None,
 ):
-	"""Idempotent single-call ingestion for the mobile app."""
+	"""Idempotent single-call ingestion for the mobile app.
+
+	custom_logged_by (the supervisor's Employee) is kept only when a trusted account posts
+	(reviewers and HR, e.g. the attendance hub relaying a phone punch under its own login);
+	for anyone else the controller override sets it from the posting user, whatever was sent.
+	"""
 	_require_supervisor()
 	if log_type not in ("IN", "OUT"):
 		frappe.throw(_("log_type must be IN or OUT."))
@@ -287,6 +293,8 @@ def sync_checkin(
 			"latitude": flt(latitude) or None,
 			"longitude": flt(longitude) or None,
 			"custom_app_source": (custom_app_source or "TPL-FieldApp")[:140],
+			# Kept only for trusted posters (see TridentEmployeeCheckin._normalise_logged_by).
+			"custom_logged_by": custom_logged_by,
 		}
 	)
 	doc.insert()
@@ -478,10 +486,15 @@ def get_project_report(from_date=None, to_date=None, projects=None):
 				"Employee", filters={"name": ["in", supervisors]}, fields=["name", "employee_name"], as_list=True
 			)
 		)
+	me = frappe.session.user
+	my_employee = frappe.db.get_value("Employee", {"user_id": me, "status": "Active"}, "name")
 	for r in rows:
 		r.logged_by_name = supervisor_names.get(r.custom_logged_by)
-		# Say whether the caller took the punch without sending other supervisors' logins.
-		r.is_mine = r.pop("owner") == frappe.session.user
+		# Say whether the caller took the punch without sending other supervisors' logins. A
+		# punch the attendance hub relayed is owned by the hub's account but logged by the
+		# supervisor, so the caller's Employee counts as well.
+		owner = r.pop("owner")
+		r.is_mine = owner == me or bool(my_employee and r.custom_logged_by == my_employee)
 
 	days = _enrich_punches(rows)
 	return {
