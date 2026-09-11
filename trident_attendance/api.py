@@ -189,7 +189,13 @@ def process_attendance(include_today=0):
 
 @frappe.whitelist()
 def get_my_projects():
-	"""Open projects the calling user is listed on. No fallback to all projects."""
+	"""Open projects the calling user is listed on (Project > Users), whatever their roles.
+
+	Reviewer roles (Attendance Admin, System Manager) do not widen this list: the app shows a
+	supervisor only the sites they are assigned to, and nearly every supervisor also holds
+	System Manager. Reviewers still see every project on the Desk review page. No fallback to
+	all projects.
+	"""
 	_require_supervisor()
 	fields = [
 		"name",
@@ -199,8 +205,6 @@ def get_my_projects():
 		"custom_site_longitude",
 		"custom_geofence_radius_meters",
 	]
-	if is_reviewer():
-		return frappe.get_all("Project", filters={"status": "Open"}, fields=fields, order_by="project_name")
 	allowed = frappe.get_all(
 		"Project User", filters={"user": frappe.session.user, "parenttype": "Project"}, pluck="parent"
 	)
@@ -420,11 +424,10 @@ def _enrich_punches(rows) -> list[dict]:
 
 
 def _report_projects() -> list[dict]:
-	"""Projects whose punches the caller may read: every project they are listed on, open or
-	closed, since a finished site's history is still theirs. Reviewers read every project."""
+	"""Projects whose punches the caller may read: every project they are listed on (Project >
+	Users), open or closed, since a finished site's history is still theirs. Reviewer roles do
+	not widen this, as in get_my_projects; reviewers see every project on the Desk review page."""
 	fields = ["name", "project_name", "status"]
-	if is_reviewer():
-		return frappe.get_all("Project", fields=fields, order_by="project_name")
 	listed = frappe.get_all(
 		"Project User", filters={"user": frappe.session.user, "parenttype": "Project"}, pluck="parent"
 	)
