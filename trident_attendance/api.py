@@ -23,6 +23,7 @@ from trident_attendance.utils import (
 	STATUS_PENDING,
 	STATUS_REJECTED,
 	SUPERVISOR_ROLES,
+	assigned_projects,
 	combine_datetime,
 	day_bounds,
 	get_settings,
@@ -189,7 +190,8 @@ def process_attendance(include_today=0):
 
 @frappe.whitelist()
 def get_my_projects():
-	"""Open projects the calling user is listed on (Project > Users), whatever their roles.
+	"""Open projects the calling user is assigned to (Project > Allowed Users or Project >
+	Users), whatever their roles.
 
 	Reviewer roles (Attendance Admin, System Manager) do not widen this list: the app shows a
 	supervisor only the sites they are assigned to, and nearly every supervisor also holds
@@ -205,9 +207,7 @@ def get_my_projects():
 		"custom_site_longitude",
 		"custom_geofence_radius_meters",
 	]
-	allowed = frappe.get_all(
-		"Project User", filters={"user": frappe.session.user, "parenttype": "Project"}, pluck="parent"
-	)
+	allowed = sorted(assigned_projects())
 	if not allowed:
 		return []
 	return frappe.get_all(
@@ -424,13 +424,12 @@ def _enrich_punches(rows) -> list[dict]:
 
 
 def _report_projects() -> list[dict]:
-	"""Projects whose punches the caller may read: every project they are listed on (Project >
-	Users), open or closed, since a finished site's history is still theirs. Reviewer roles do
-	not widen this, as in get_my_projects; reviewers see every project on the Desk review page."""
+	"""Projects whose punches the caller may read: every project they are assigned to (Project >
+	Allowed Users or Project > Users), open or closed, since a finished site's history is still
+	theirs. Reviewer roles do not widen this, as in get_my_projects; reviewers see every project
+	on the Desk review page."""
 	fields = ["name", "project_name", "status"]
-	listed = frappe.get_all(
-		"Project User", filters={"user": frappe.session.user, "parenttype": "Project"}, pluck="parent"
-	)
+	listed = sorted(assigned_projects())
 	if not listed:
 		return []
 	return frappe.get_all("Project", filters={"name": ["in", listed]}, fields=fields, order_by="project_name")

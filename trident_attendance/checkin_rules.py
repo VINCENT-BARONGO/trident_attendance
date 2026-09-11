@@ -18,6 +18,7 @@ from hrms.hr.utils import get_distance_between_coordinates
 from trident_attendance.utils import (
 	INTERNAL_SOURCE_PREFIX,
 	STATUS_REJECTED,
+	assigned_projects,
 	day_bounds,
 	join_reasons,
 	scope_filters,
@@ -112,9 +113,8 @@ def evaluate_project(doc, settings) -> list[str]:
 
 	reasons = []
 	owner = doc.get("owner") or frappe.session.user
-	if owner not in ("Administrator",) and not frappe.db.exists(
-		"Project User", {"parent": project, "parenttype": "Project", "user": owner}
-	):
+	# Assigned = Project > Allowed Users (the live site's custom table) or Project > Users.
+	if owner not in ("Administrator",) and project not in assigned_projects(owner):
 		reasons.append(NOT_ALLOWED_ON_PROJECT)
 
 	lat, lon, radius = frappe.db.get_value(

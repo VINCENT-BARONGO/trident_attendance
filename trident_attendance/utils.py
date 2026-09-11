@@ -53,6 +53,23 @@ def is_viewer(user: str | None = None) -> bool:
 	return bool(VIEWER_ROLES & set(frappe.get_roles(user)))
 
 
+# Custom child table behind Project > Allowed Users on the live site. The office assigns
+# supervisors there; few are in the standard Project > Users table.
+ALLOWED_USERS_DOCTYPE = "Project Allowed User"
+
+
+def assigned_projects(user: str | None = None) -> set[str]:
+	"""Projects a user is assigned to: Project > Allowed Users (when the site has that table)
+	or the standard Project > Users. Roles never widen this."""
+	user = user or frappe.session.user
+	names = set(frappe.get_all("Project User", filters={"user": user, "parenttype": "Project"}, pluck="parent"))
+	if frappe.db.exists("DocType", ALLOWED_USERS_DOCTYPE):
+		names.update(
+			frappe.get_all(ALLOWED_USERS_DOCTYPE, filters={"user": user, "parenttype": "Project"}, pluck="parent")
+		)
+	return names
+
+
 def day_bounds(day) -> tuple[str, str]:
 	day = getdate(day)
 	return f"{day} 00:00:00", f"{day} 23:59:59"
