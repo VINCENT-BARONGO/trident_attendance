@@ -26,6 +26,7 @@ from trident_attendance.utils import (
 	assigned_projects,
 	combine_datetime,
 	day_bounds,
+	employee_for_user,
 	get_settings,
 	is_reviewer,
 	join_reasons,
@@ -212,6 +213,78 @@ def get_my_projects():
 		return []
 	return frappe.get_all(
 		"Project", filters={"name": ["in", allowed], "status": "Open"}, fields=fields, order_by="project_name"
+	)
+
+
+# ---------------------------------------------------------------------------
+# Employee lookups (mobile app)
+# ---------------------------------------------------------------------------
+
+# Exactly what the app reads off an Employee (EmployeeRepository.safeFields).
+APP_EMPLOYEE_FIELDS = (
+	"name",
+	"employee_name",
+	"custom_id_number",
+	"image",
+	"status",
+	"custom_verified",
+	"custom_project",
+	"default_shift",
+	"user_id",
+)
+
+ROSTER_LIMIT = 5000
+
+
+@frappe.whitelist()
+def get_my_employee():
+	"""The caller's own Active Employee, or None when the office has not linked one.
+
+	The app used to read this as `/api/resource/Employee?filters=[["user_id","=",...]]`, which
+	Frappe narrows by the caller's User Permissions. A supervisor scoped to a set of projects
+	cannot see an Employee whose Assigned Project is empty -- their own row included -- so a
+	correctly linked login still reported "not linked". Resolved here by user_id alone.
+	"""
+	_require_supervisor()
+	name = employee_for_user(frappe.session.user)
+	if not name:
+		return None
+	return frappe.db.get_value("Employee", name, list(APP_EMPLOYEE_FIELDS), as_dict=True)
+
+
+@frappe.whitelist()
+def get_employees(id_number=None, employee=None, include_modified=0, limit=ROSTER_LIMIT):
+	"""Employees for the app: one by ID number, one by name, or the whole Active roster.
+
+	Same reason as `get_my_employee`. Staff are never assigned to a project, so User Permissions
+	on Employee hide nearly the whole roster from a project-scoped supervisor and every scan
+	comes back "Employee not found". `frappe.get_all` does not apply them; the supervisor role
+	already carries Employee read.
+
+	`id_number` returns every match rather than the first, so the app can name a duplicate ID
+	instead of silently punching the wrong person. `employee` (a docname) ignores status: a row
+	the app already holds is still shown after the office sets it to Left.
+	"""
+	_require_supervisor()
+	fields = list(APP_EMPLOYEE_FIELDS)
+	if cint(include_modified):
+		fields.append("modified")
+
+	filters = {"status": "Active"}
+	if employee:
+		filters = {"name": str(employee).strip()}
+	elif id_number is not None:
+		id_number = str(id_number).strip()
+		if not id_number:
+			frappe.throw(_("ID number is required"))
+		filters["custom_id_number"] = id_number
+
+	return frappe.get_all(
+		"Employee",
+		filters=filters,
+		fields=fields,
+		order_by="name asc",
+		limit_page_length=cint(limit) or ROSTER_LIMIT,
 	)
 
 
