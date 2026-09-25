@@ -300,7 +300,10 @@ def get_employee_photo(employee):
 	and a supervisor could not check themselves in at all (they must match).
 
 	Read here with the File's own `get_content`, which also fetches photos kept in External
-	Storage. Same gate as the lookups: a SUPERVISOR_ROLES role.
+	Storage. Same gate as the lookups: a SUPERVISOR_ROLES role. External Storage's
+	`get_content` runs the same private-file check against the session user, so the read itself
+	is done as Administrator (and only the read: the caller is restored in `finally`); the role
+	check above is what decides who may have the photo.
 	"""
 	_require_supervisor()
 	employee = str(employee or "").strip()
@@ -316,9 +319,16 @@ def get_employee_photo(employee):
 	if not file_name:
 		raise frappe.DoesNotExistError(_("This employee's photo file is missing."))
 
-	file = frappe.get_doc("File", file_name)
+	caller = frappe.session.user
+	try:
+		frappe.set_user("Administrator")
+		file = frappe.get_doc("File", file_name)
+		content = file.get_content()
+	finally:
+		frappe.set_user(caller)
+
 	frappe.local.response.filename = file.file_name or f"{employee}.jpg"
-	frappe.local.response.filecontent = file.get_content()
+	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
 
 
