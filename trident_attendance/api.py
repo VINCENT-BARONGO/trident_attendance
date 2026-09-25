@@ -288,6 +288,40 @@ def get_employees(id_number=None, employee=None, include_modified=0, limit=ROSTE
 	)
 
 
+@frappe.whitelist()
+def get_employee_photo(employee):
+	"""The employee's reference photo (Employee.image) as raw image bytes, for face matching.
+
+	The app used to download `Employee.image` straight from its file URL. Employee photos are
+	private files, and Frappe serves a private file only to someone who can read the Employee
+	it is attached to -- which, with strict user permissions and project-scoped supervisors, is
+	nobody whose Assigned Project is empty. `get_employees` already resolves the names
+	server-side; without this the phone had the name but no photo, recorded "No Baseline Photo",
+	and a supervisor could not check themselves in at all (they must match).
+
+	Read here with the File's own `get_content`, which also fetches photos kept in External
+	Storage. Same gate as the lookups: a SUPERVISOR_ROLES role.
+	"""
+	_require_supervisor()
+	employee = str(employee or "").strip()
+	image = frappe.db.get_value("Employee", employee, "image") if employee else None
+	if not image:
+		raise frappe.DoesNotExistError(_("This employee has no photo."))
+
+	file_name = frappe.db.get_value(
+		"File",
+		{"file_url": image, "attached_to_doctype": "Employee", "attached_to_name": employee},
+		"name",
+	) or frappe.db.get_value("File", {"file_url": image}, "name")
+	if not file_name:
+		raise frappe.DoesNotExistError(_("This employee's photo file is missing."))
+
+	file = frappe.get_doc("File", file_name)
+	frappe.local.response.filename = file.file_name or f"{employee}.jpg"
+	frappe.local.response.filecontent = file.get_content()
+	frappe.local.response.type = "download"
+
+
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
 MAX_PUNCH_AGE_DAYS = 60
 IMAGE_SIGNATURES = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n")
