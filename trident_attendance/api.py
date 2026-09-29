@@ -10,6 +10,7 @@ calling user's own punches and projects.
 
 import base64
 import json
+import re
 from datetime import timedelta
 
 import frappe
@@ -306,18 +307,25 @@ def get_employee_photo(employee):
 	check above is what decides who may have the photo.
 	"""
 	_require_supervisor()
-	employee = str(employee or "").strip()
-	image = frappe.db.get_value("Employee", employee, "image") if employee else None
+	_serve_photo("Employee", employee, "image")
+
+
+def _serve_photo(doctype, name, field):
+	"""Sends `doctype`.`field` (a private file, possibly in External Storage) as the response.
+	The caller has already checked the role; see get_employee_photo for why the read runs as
+	Administrator."""
+	name = str(name or "").strip()
+	image = frappe.db.get_value(doctype, name, field) if name else None
 	if not image:
-		raise frappe.DoesNotExistError(_("This employee has no photo."))
+		raise frappe.DoesNotExistError(_("No photo on {0} {1}.").format(doctype, name))
 
 	file_name = frappe.db.get_value(
 		"File",
-		{"file_url": image, "attached_to_doctype": "Employee", "attached_to_name": employee},
+		{"file_url": image, "attached_to_doctype": doctype, "attached_to_name": name},
 		"name",
 	) or frappe.db.get_value("File", {"file_url": image}, "name")
 	if not file_name:
-		raise frappe.DoesNotExistError(_("This employee's photo file is missing."))
+		raise frappe.DoesNotExistError(_("The photo file of {0} {1} is missing.").format(doctype, name))
 
 	caller = frappe.session.user
 	try:
@@ -327,9 +335,51 @@ def get_employee_photo(employee):
 	finally:
 		frappe.set_user(caller)
 
-	frappe.local.response.filename = file.file_name or f"{employee}.jpg"
+	frappe.local.response.filename = file.file_name or f"{name}.jpg"
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
+
+
+# ---------------------------------------------------------------------------
+# Casual labourers (mobile app)
+# ---------------------------------------------------------------------------
+
+# What the app reads off a Casual Labourer. `photo` is the face-match reference.
+APP_CASUAL_FIELDS = ("name", "full_name", "id_number", "photo", "status", "project")
+
+
+@frappe.whitelist()
+def get_casuals(id_number=None, casual=None):
+	"""Casual labourers for the app: one by ID number (all matches, so a duplicate is named rather
+	than punched), one by name, or every Active one.
+
+	Supervisors hold no permission on Casual Labourer (it is registered in the office), so the app
+	reads it here, behind the same SUPERVISOR_ROLES check as the Employee lookups. A labourer
+	marked Left or Blacklisted is not returned by ID number: they cannot be clocked in.
+	"""
+	_require_supervisor()
+	filters = {"status": "Active"}
+	if casual:
+		filters = {"name": str(casual).strip()}
+	elif id_number is not None:
+		digits = re.sub(r"\D", "", str(id_number))
+		if not digits:
+			frappe.throw(_("ID number is required"))
+		filters["id_number"] = digits
+	return frappe.get_all(
+		"Casual Labourer",
+		filters=filters,
+		fields=list(APP_CASUAL_FIELDS),
+		order_by="name asc",
+		limit_page_length=ROSTER_LIMIT,
+	)
+
+
+@frappe.whitelist()
+def get_casual_photo(casual):
+	"""A casual labourer's reference photo as raw image bytes, like get_employee_photo."""
+	_require_supervisor()
+	_serve_photo("Casual Labourer", casual, "photo")
 
 
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
