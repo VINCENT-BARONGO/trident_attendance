@@ -1,0 +1,225 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:CCI-{YYYY}-{#####}",
+ "creation": "2026-09-29 10:00:00.000000",
+ "description": "A casual labourer's clock-in or clock-out, taken on a supervisor's phone and sent here by the attendance hub. The photo stays on the hub.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "casual_labourer",
+  "full_name",
+  "id_number",
+  "column_break_who",
+  "log_type",
+  "time",
+  "project",
+  "evidence_section",
+  "supervisor",
+  "supervisor_user",
+  "id_number_scanned",
+  "column_break_evidence",
+  "face_match_result",
+  "face_match_score",
+  "latitude",
+  "longitude",
+  "source_section",
+  "client_uid",
+  "column_break_source",
+  "app_source"
+ ],
+ "fields": [
+  {
+   "fieldname": "casual_labourer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Casual Labourer",
+   "options": "Casual Labourer",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "casual_labourer.full_name",
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "casual_labourer.id_number",
+   "fieldname": "id_number",
+   "fieldtype": "Data",
+   "label": "ID Number",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_who",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "log_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Log Type",
+   "options": "IN\nOUT",
+   "reqd": 1
+  },
+  {
+   "fieldname": "time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Project / Site",
+   "options": "Project"
+  },
+  {
+   "fieldname": "evidence_section",
+   "fieldtype": "Section Break",
+   "label": "Evidence"
+  },
+  {
+   "description": "The supervisor's Employee, who took the punch on their phone.",
+   "fieldname": "supervisor",
+   "fieldtype": "Link",
+   "label": "Logged By",
+   "options": "Employee"
+  },
+  {
+   "fieldname": "supervisor_user",
+   "fieldtype": "Data",
+   "label": "Logged By (Login)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "id_number_scanned",
+   "fieldtype": "Data",
+   "label": "ID Number Scanned",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_evidence",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "face_match_result",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Face Match Result",
+   "read_only": 1
+  },
+  {
+   "fieldname": "face_match_score",
+   "fieldtype": "Float",
+   "label": "Face Match Score",
+   "precision": "3",
+   "read_only": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "6",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "source_section",
+   "fieldtype": "Section Break",
+   "label": "Source"
+  },
+  {
+   "description": "The phone's id for this punch; the hub looks it up before creating, so a retry never books twice.",
+   "fieldname": "client_uid",
+   "fieldtype": "Data",
+   "label": "Client UID",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "app_source",
+   "fieldtype": "Data",
+   "label": "App Source",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-09-29 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Casual Checkin",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Attendance Admin",
+   "write": 1
+  }
+ ],
+ "sort_field": "time",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
+ "track_changes": 1
+}
