@@ -46,6 +46,9 @@ class TridentEmployeeCheckin(EmployeeCheckin):
 			resolved = employee_for_user(value)
 
 		self.custom_logged_by = resolved
+		# A trusted poster (the attendance hub) has already checked the supervisor: see is_relayed.
+		if not resolved and trusted:
+			return
 		if not resolved and REASON_NO_SUPERVISOR_EMPLOYEE not in self.flags.trident_reasons:
 			self.flags.trident_reasons.append(REASON_NO_SUPERVISOR_EMPLOYEE)
 

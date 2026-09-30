@@ -20,6 +20,7 @@ from trident_attendance.utils import (
 	STATUS_REJECTED,
 	assigned_projects,
 	day_bounds,
+	is_relayed,
 	is_viewer,
 	join_reasons,
 	scope_filters,
@@ -117,11 +118,14 @@ def evaluate_project(doc, settings) -> list[str]:
 	# the attendance hub relaying a phone punch) named one in custom_logged_by, as the
 	# controller override also allows only for trusted posters.
 	# Assigned = Project > Allowed Users (the live site's custom table) or Project > Users.
-	supervisor = doc.get("owner") or frappe.session.user
-	if doc.get("custom_logged_by") and is_viewer():
-		supervisor = frappe.db.get_value("Employee", doc.custom_logged_by, "user_id") or supervisor
-	if supervisor not in ("Administrator",) and project not in assigned_projects(supervisor):
-		reasons.append(NOT_ALLOWED_ON_PROJECT)
+	# A punch relayed by the hub (or posted by a reviewer) was checked before it came: see
+	# is_relayed.
+	if not is_relayed(doc):
+		supervisor = doc.get("owner") or frappe.session.user
+		if doc.get("custom_logged_by") and is_viewer():
+			supervisor = frappe.db.get_value("Employee", doc.custom_logged_by, "user_id") or supervisor
+		if supervisor not in ("Administrator",) and project not in assigned_projects(supervisor):
+			reasons.append(NOT_ALLOWED_ON_PROJECT)
 
 	lat, lon, radius = frappe.db.get_value(
 		"Project",
@@ -219,7 +223,7 @@ def _supervisor_reasons(ins, outs, day, settings) -> list[str]:
 def _needs_supervisor(log) -> bool:
 	supervisor = log.get("custom_logged_by")
 	# No supervisor resolved (reported separately) or the supervisor punching themselves.
-	return bool(supervisor) and supervisor != log.employee and not is_internal(log)
+	return bool(supervisor) and supervisor != log.employee and not is_internal(log) and not is_relayed(log)
 
 
 def _supervisor_punch_exists(log, log_type: str, day, settings) -> bool:

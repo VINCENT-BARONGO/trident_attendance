@@ -55,6 +55,7 @@ from trident_attendance.utils import (
 	last_complete_date,
 	scope_filters,
 	split_reasons,
+	is_relayed,
 )
 
 PUNCH_FIELDS = [
@@ -320,7 +321,7 @@ def _refresh_instant(log, settings) -> list[str]:
 	if is_internal(log):
 		return []
 	reasons = evaluate_face(log) + evaluate_project(log, settings)
-	if not log.custom_logged_by:
+	if not log.custom_logged_by and not is_relayed(log):
 		reasons.append(NO_SUPERVISOR_EMPLOYEE)
 	# evaluate_project stores the distance on the dict; persist it when it changed.
 	distance = log.get("custom_distance_from_site")

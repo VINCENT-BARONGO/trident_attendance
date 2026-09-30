@@ -53,6 +53,19 @@ def is_viewer(user: str | None = None) -> bool:
 	return bool(VIEWER_ROLES & set(frappe.get_roles(user)))
 
 
+def is_relayed(log) -> bool:
+	"""A punch posted by a trusted account -- the attendance hub's, or an office reviewer's.
+
+	The hub only relays a phone punch after its own checks: a registered phone, a signed-in
+	supervisor linked to an Employee, the supervisor-first order on the phone, the face and the
+	project. The ERP's supervisor rules (who logged it, whether they are on the project, whether
+	they clocked in first) would only repeat those, and they hold every relayed day when the
+	supervisor field does not travel. Such punches skip them; every other rule still applies.
+	"""
+	owner = log.get("owner")
+	return bool(owner) and owner != "Guest" and is_reviewer(owner)
+
+
 # Custom child table behind Project > Allowed Users on the live site. The office assigns
 # supervisors there; few are in the standard Project > Users table.
 ALLOWED_USERS_DOCTYPE = "Project Allowed User"
