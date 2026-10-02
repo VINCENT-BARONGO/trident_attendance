@@ -13,6 +13,8 @@ SUPERVISOR_ROLES = {"Attendance Marking", "Attendance Admin", "System Manager"}
 # Punches this app creates itself carry this prefix so the instant rules skip them.
 INTERNAL_SOURCE_PREFIX = "trident_attendance/"
 
+DEFAULT_ID_FIELD = "custom_id_number"
+
 STATUS_PENDING = "Pending Review"
 STATUS_AUTO_RELEASED = "Auto-Released"
 STATUS_RELEASED = "Released"
@@ -30,6 +32,20 @@ def in_scope(doc, settings=None) -> bool:
 	if settings.staged_sources == "All sources":
 		return True
 	return bool(doc.get("custom_app_source"))
+
+
+def employee_id_field(settings=None) -> str:
+	"""The Employee field holding the national ID number.
+
+	This app's own `custom_id_number`, unless the site already keeps the number elsewhere: a
+	site with CSF KE has a mandatory `national_id` on every Employee, and a second, empty field
+	would leave every scan at "Employee not found". Callers hand the value to the app as
+	`custom_id_number` either way.
+	"""
+	field = (settings or get_settings()).get("employee_id_field")
+	if field and field != DEFAULT_ID_FIELD and frappe.get_meta("Employee").has_field(field):
+		return field
+	return DEFAULT_ID_FIELD
 
 
 def scope_filters(settings=None) -> dict:

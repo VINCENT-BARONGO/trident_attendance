@@ -9,6 +9,7 @@
   "monitor_html",
   "scope_section",
   "staged_sources",
+  "employee_id_field",
   "day_section",
   "day_cutoff_time",
   "half_day_threshold_hours",
@@ -60,6 +61,13 @@
    "fieldtype": "Select",
    "label": "Staged Sources",
    "options": "Mobile app only\nAll sources"
+  },
+  {
+   "default": "custom_id_number",
+   "description": "Employee field that holds the national ID number the app scans. Leave as custom_id_number unless this site already keeps the number in another field (for example national_id).",
+   "fieldname": "employee_id_field",
+   "fieldtype": "Data",
+   "label": "Employee ID Number Field"
   },
   {
    "fieldname": "day_section",
@@ -230,7 +238,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-09-09 18:00:00.000000",
+ "modified": "2026-10-01 15:30:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",

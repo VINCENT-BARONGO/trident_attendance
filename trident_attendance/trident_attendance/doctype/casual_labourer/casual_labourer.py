@@ -4,6 +4,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from trident_attendance.utils import employee_id_field
+
 
 class CasualLabourer(Document):
 	"""A casual labourer who is not an Employee. Registered in the office; the attendance app
@@ -26,7 +28,7 @@ class CasualLabourer(Document):
 	def _check_not_an_employee(self):
 		# The app looks an ID number up among Employees and casuals; one number must be one person.
 		employee = frappe.db.get_value(
-			"Employee", {"custom_id_number": self.id_number, "status": "Active"}, ["name", "employee_name"], as_dict=True
+			"Employee", {employee_id_field(): self.id_number, "status": "Active"}, ["name", "employee_name"], as_dict=True
 		)
 		if employee:
 			frappe.throw(

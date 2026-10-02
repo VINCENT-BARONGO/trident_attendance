@@ -125,6 +125,10 @@ shared plans.
   without GPS).
 - Do not enable auto attendance on a Shift Type for employees who use the app while
   *Staged Sources* is "All sources".
+- If the site already keeps the national ID number on Employee in another field (a CSF KE
+  site has a mandatory `national_id`), name it in `Trident Attendance Settings > Employee
+  ID Number Field`. The app is still handed the value as `custom_id_number`. A fresh install
+  picks `national_id` by itself when `custom_id_number` is empty on every Active Employee.
 
 ### Before pushing: check API usage against the site's frappe version
 

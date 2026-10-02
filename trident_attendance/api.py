@@ -20,6 +20,7 @@ from frappe.utils import add_days, cint, date_diff, flt, get_datetime, getdate, 
 from trident_attendance import tasks
 from trident_attendance.checkin_rules import REJECTED_PREFIX
 from trident_attendance.utils import (
+	DEFAULT_ID_FIELD,
 	INTERNAL_SOURCE_PREFIX,
 	STATUS_PENDING,
 	STATUS_REJECTED,
@@ -28,6 +29,7 @@ from trident_attendance.utils import (
 	combine_datetime,
 	day_bounds,
 	employee_for_user,
+	employee_id_field,
 	get_settings,
 	is_reviewer,
 	join_reasons,
@@ -237,6 +239,17 @@ APP_EMPLOYEE_FIELDS = (
 ROSTER_LIMIT = 5000
 
 
+def _employee_fields(id_field) -> list[str]:
+	return [id_field if f == DEFAULT_ID_FIELD else f for f in APP_EMPLOYEE_FIELDS]
+
+
+def _app_employee(row, id_field):
+	"""The app reads the ID number as `custom_id_number`, whichever field the site keeps it in."""
+	if row and id_field != DEFAULT_ID_FIELD:
+		row[DEFAULT_ID_FIELD] = row.pop(id_field, None)
+	return row
+
+
 @frappe.whitelist()
 def get_my_employee():
 	"""The caller's own Active Employee, or None when the office has not linked one.
@@ -250,7 +263,8 @@ def get_my_employee():
 	name = employee_for_user(frappe.session.user)
 	if not name:
 		return None
-	return frappe.db.get_value("Employee", name, list(APP_EMPLOYEE_FIELDS), as_dict=True)
+	id_field = employee_id_field()
+	return _app_employee(frappe.db.get_value("Employee", name, _employee_fields(id_field), as_dict=True), id_field)
 
 
 @frappe.whitelist()
@@ -267,7 +281,8 @@ def get_employees(id_number=None, employee=None, include_modified=0, limit=ROSTE
 	the app already holds is still shown after the office sets it to Left.
 	"""
 	_require_supervisor()
-	fields = list(APP_EMPLOYEE_FIELDS)
+	id_field = employee_id_field()
+	fields = _employee_fields(id_field)
 	if cint(include_modified):
 		fields.append("modified")
 
@@ -278,15 +293,16 @@ def get_employees(id_number=None, employee=None, include_modified=0, limit=ROSTE
 		id_number = str(id_number).strip()
 		if not id_number:
 			frappe.throw(_("ID number is required"))
-		filters["custom_id_number"] = id_number
+		filters[id_field] = id_number
 
-	return frappe.get_all(
+	rows = frappe.get_all(
 		"Employee",
 		filters=filters,
 		fields=fields,
 		order_by="name asc",
 		limit_page_length=cint(limit) or ROSTER_LIMIT,
 	)
+	return [_app_employee(row, id_field) for row in rows]
 
 
 @frappe.whitelist()

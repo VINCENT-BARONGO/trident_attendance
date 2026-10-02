@@ -4,6 +4,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from trident_attendance.utils import employee_id_field
+
 EXPECTED_TIMEZONE = "Africa/Nairobi"
 
 
@@ -69,7 +71,7 @@ def supervisor_checks():
 				)
 			)
 		else:
-			image, id_number = frappe.db.get_value("Employee", employee, ["image", "custom_id_number"])
+			image, id_number = frappe.db.get_value("Employee", employee, ["image", employee_id_field()])
 			if not image:
 				rows.append(row(_("Supervisors"), "Employee", employee, _("No profile photo: the supervisor's own face match can never be 'Matched'"), _("Upload a clear face photo on the Employee record")))
 			if not id_number:
@@ -79,23 +81,25 @@ def supervisor_checks():
 
 def employee_checks():
 	rows = []
+	id_field = employee_id_field()
 	employees = frappe.get_all(
 		"Employee",
 		filters={"status": "Active", "custom_project": ["is", "set"]},
-		fields=["name", "employee_name", "image", "custom_id_number", "custom_project"],
+		fields=["name", "employee_name", "image", id_field, "custom_project"],
 	)
 	for e in employees:
-		if not e.custom_id_number:
+		if not e.get(id_field):
 			rows.append(row(_("Site employees"), "Employee", e.name, _("No National ID number: cannot be found by the ID scan"), _("Fill Employee > National ID Number")))
 		if not e.image:
 			rows.append(row(_("Site employees"), "Employee", e.name, _("No profile photo: face verification reports 'No Baseline Photo'"), _("Upload a clear face photo on the Employee record")))
 	dupes = frappe.db.sql(
-		"""select custom_id_number, count(*) n from `tabEmployee`
-		where status='Active' and ifnull(custom_id_number,'')!='' group by custom_id_number having n > 1""",
+		# id_field is a fieldname checked against the Employee meta, never user input.
+		f"""select `{id_field}` id_number, count(*) n from `tabEmployee`
+		where status='Active' and ifnull(`{id_field}`,'')!='' group by `{id_field}` having n > 1""",
 		as_dict=True,
 	)
 	for d in dupes:
-		rows.append(row(_("Site employees"), "DocType", "Employee", _("National ID {0} is on {1} active employees: the app refuses the scan").format(d.custom_id_number, d.n), _("Fix the duplicate ID numbers")))
+		rows.append(row(_("Site employees"), "DocType", "Employee", _("National ID {0} is on {1} active employees: the app refuses the scan").format(d.id_number, d.n), _("Fix the duplicate ID numbers")))
 	return rows
 
 

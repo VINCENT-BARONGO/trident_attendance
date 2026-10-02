@@ -6,6 +6,9 @@ from frappe.utils import cint, flt, get_time
 
 class TridentAttendanceSettings(Document):
 	def validate(self):
+		self.employee_id_field = (self.employee_id_field or "").strip() or None
+		if self.employee_id_field and not frappe.get_meta("Employee").has_field(self.employee_id_field):
+			frappe.throw(_("Employee has no field named {0}.").format(self.employee_id_field))
 		for field in ("geofence_tolerance_meters", "photo_retention_days"):
 			if cint(self.get(field)) < 0:
 				frappe.throw(_("{0} cannot be negative.").format(self.meta.get_label(field)))

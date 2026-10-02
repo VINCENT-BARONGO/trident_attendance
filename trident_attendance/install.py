@@ -30,10 +30,45 @@ PERM_FIELDS = (
 
 def after_install():
 	ensure_standard_perms()
+	adopt_site_id_field()
 
 
 def after_migrate():
 	ensure_standard_perms()
+
+
+# Where a site that predates this app is likely to keep the national ID number, in the order
+# tried. `national_id` is CSF KE's (mandatory there).
+SITE_ID_FIELDS = ("national_id",)
+
+
+def adopt_site_id_field():
+	"""Point `Employee ID Number Field` at the field the site already fills.
+
+	The fixture always adds an empty `custom_id_number`. On a site whose Employees carry the
+	number elsewhere every scan would end at "Employee not found" until someone found the
+	setting, so it is chosen here -- only while the setting is untouched, `custom_id_number`
+	is empty on every Active Employee and the other field is not. A site that fills
+	`custom_id_number` is never changed. Safe to run repeatedly.
+	"""
+	from trident_attendance.utils import DEFAULT_ID_FIELD
+
+	settings = "Trident Attendance Settings"
+	if not frappe.db.exists("DocType", settings):
+		return None
+	if (frappe.db.get_single_value(settings, "employee_id_field") or DEFAULT_ID_FIELD) != DEFAULT_ID_FIELD:
+		return None
+	meta = frappe.get_meta("Employee")
+	if meta.has_field(DEFAULT_ID_FIELD) and frappe.db.exists(
+		"Employee", {"status": "Active", DEFAULT_ID_FIELD: ["is", "set"]}
+	):
+		return None
+	for field in SITE_ID_FIELDS:
+		if meta.has_field(field) and frappe.db.exists("Employee", {"status": "Active", field: ["is", "set"]}):
+			frappe.db.set_single_value(settings, "employee_id_field", field)
+			frappe.logger("trident_attendance").info(f"Employee ID Number Field set to {field}")
+			return field
+	return None
 
 
 def ensure_standard_perms():
