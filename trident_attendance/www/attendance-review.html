@@ -25,7 +25,10 @@
 		--ar-chip-bg: #2b3442; --ar-chip-text: #d5dae1; --ar-primary: #3b82f6; --ar-primary-text: #ffffff;
 	}
 
-	.ar-wrap { max-width: 1240px; margin: 0 auto; padding: 1rem 1rem 6rem; color: var(--ar-text); font-size: 14px; }
+	/* The website theme may leave the page on the browser's serif; name the Desk's own stack. */
+	.ar-wrap { max-width: 1240px; margin: 0 auto; padding: 1rem 1rem 6rem; color: var(--ar-text); font-size: 14px; line-height: 1.45;
+		font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-variant-numeric: tabular-nums; }
+	.ar-wrap h1, .ar-wrap h2, .ar-wrap table, .ar-wrap input, .ar-wrap summary { font-family: inherit; }
 	.ar-wrap a { color: var(--ar-link); }
 	.ar-wrap button, .ar-wrap select { font: inherit; }
 	.ar-btn { border: 1px solid var(--ar-border); background: var(--ar-surface); color: var(--ar-text); border-radius: 6px; padding: .3rem .7rem; font-size: .85rem; cursor: pointer; line-height: 1.3; white-space: nowrap; }
@@ -270,7 +273,7 @@
 			</div>
 			{% if g.reasons %}
 			<div class="ar-chips">
-				{% for r in g.reasons %}<span class="chip {{ 'block' if r.blocking }}" title="{{ r.hint|e }}">{{ r.text|e }}</span>{% endfor %}
+				{% for r in g.reasons %}<span class="chip {{ 'block' if r.blocking }}" title="{{ r.hint|e }}">{{ r.text|e }}{% if r.times > 1 %} &times;{{ r.times }}{% endif %}</span>{% endfor %}
 			</div>
 			{% endif %}
 			<details class="ar-punches" {{ "open" if g.state == "Pending" }}>
@@ -289,7 +292,7 @@
 						{% if can_process %}<td>{% if r.is_pending %}<input type="checkbox" class="ar-pick" value="{{ r.name|e }}" data-employee="{{ g.employee|e }}" data-date="{{ g.date }}">{% endif %}</td>{% endif %}
 						<td><a href="/app/employee-checkin/{{ r.name|urlencode }}" title="{{ r.name|e }}">{{ r.time_str }}</a></td>
 						<td><span class="pill {{ 'pill-in' if r.log_type == 'IN' else 'pill-out' }}">{{ r.log_type or "—" }}</span></td>
-						<td>{{ r.custom_site_project|e if r.custom_site_project else "—" }}</td>
+						<td>{% if r.custom_site_project %}<span title="{{ r.custom_site_project|e }}">{{ project_names.get(r.custom_site_project, r.custom_site_project)|e }}</span>{% else %}—{% endif %}</td>
 						<td>
 							{% if r.custom_face_match_result == "Matched" %}<span class="ok">Matched</span>
 							{% elif r.custom_face_match_result == "No Match" %}<span class="bad">No Match</span>

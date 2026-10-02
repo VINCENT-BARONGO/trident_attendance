@@ -7,6 +7,7 @@ from frappe.utils import add_days, get_datetime, get_time, getdate, nowdate
 from trident_attendance.checkin_rules import (
 	ALREADY_MARKED_PREFIX,
 	DAY_PREFIXES,
+	GEOFENCE_PREFIX,
 	evaluate_day,
 	is_blocking,
 	strip_prefixes,
@@ -351,7 +352,10 @@ def _group_by_day(
 						reasons.append(reason)
 			except Exception:
 				frappe.log_error(title="attendance-review: live day evaluation failed")
-		g["reasons"] = [{"text": r, "blocking": is_blocking(r, settings) if g["state"] == "Pending" else False, "hint": _hint(r)} for r in reasons]
+		g["reasons"] = [
+			{"text": r, "times": n, "blocking": is_blocking(r, settings) if g["state"] == "Pending" else False, "hint": _hint(r)}
+			for r, n in _merge_geofence(reasons)
+		]
 		g["blocking"] = [r["text"] for r in g["reasons"] if r["blocking"]]
 		g["can_release"] = g["state"] == "Pending" and bool(g["pending_names"]) and not g["missing_out"] and bool(ins)
 
@@ -444,6 +448,27 @@ def _stats(settings) -> dict:
 		"today_punches": count({"time": ["between", [t_start, t_end]]}),
 		"last_run": last_run[0] if last_run else None,
 	}
+
+
+def _merge_geofence(reasons) -> list:
+	"""[(reason, times)]: every punch outside the geofence brings its own "Outside geofence (5105m,
+	allowed 150m)", a metre apart. One chip says it -- the farthest -- with how many punches."""
+	fences = [r for r in reasons if r.startswith(GEOFENCE_PREFIX)]
+	if len(fences) < 2:
+		return [(r, 1) for r in reasons]
+
+	def metres(reason):
+		m = re.search(r"\((\d+)m", reason)
+		return int(m.group(1)) if m else 0
+
+	worst = max(fences, key=metres)
+	out = []
+	for r in reasons:
+		if r is worst:
+			out.append((r, len(fences)))
+		elif r not in fences:
+			out.append((r, 1))
+	return out
 
 
 def _hint(reason: str) -> str:
