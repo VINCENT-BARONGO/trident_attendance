@@ -67,7 +67,7 @@
 
 	.ar-card { border: 1px solid var(--ar-border); border-radius: 10px; margin-bottom: .55rem; background: var(--ar-bg); overflow: hidden; }
 	.ar-card.pending { border-left: 4px solid var(--ar-warn); }
-	.ar-card.marked { border-left: 4px solid var(--ar-ok); }
+	.ar-card.marked, .ar-card.covered { border-left: 4px solid var(--ar-ok); }
 	.ar-card.rejected { border-left: 4px solid var(--ar-bad); opacity: .8; }
 	.ar-card.released { border-left: 4px solid var(--ar-info); }
 	.ar-card.unstaged { border-left: 4px solid var(--ar-faint); }
@@ -93,11 +93,13 @@
 	.pill-out { background: var(--ar-bad-bg); color: var(--ar-bad); }
 	.pill-state { background: var(--ar-chip-bg); color: var(--ar-chip-text); }
 	.pill-state.pending { background: var(--ar-warn-bg); color: var(--ar-warn); }
-	.pill-state.marked { background: var(--ar-ok-bg); color: var(--ar-ok); }
+	.pill-state.marked, .pill-state.covered { background: var(--ar-ok-bg); color: var(--ar-ok); }
 	.pill-state.rejected { background: var(--ar-bad-bg); color: var(--ar-bad); }
 	.pill-state.released { background: var(--ar-info-bg); color: var(--ar-info); }
 	.ok { color: var(--ar-ok); font-weight: 600; } .warn { color: var(--ar-warn); font-weight: 600; } .bad { color: var(--ar-bad); font-weight: 600; } .muted { color: var(--ar-faint); }
 	.ar-scroll { overflow-x: auto; }
+	details.ar-punches > summary { cursor: pointer; padding: .3rem .8rem; color: var(--ar-muted); font-size: .78rem; }
+	details.ar-punches[open] > summary { display: none; }
 	.ar-empty { color: var(--ar-muted); padding: 2.5rem 1rem; text-align: center; border: 1px dashed var(--ar-border); border-radius: 10px; }
 	.thumb { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--ar-border); background: var(--ar-surface); vertical-align: middle; }
 	.thumb-pair { display: inline-flex; gap: .25rem; align-items: center; }
@@ -115,7 +117,8 @@
 {% endblock %}
 
 {% block page_content %}
-{% set qs = "&project=" ~ (project_filter|urlencode) ~ "&supervisor=" ~ (supervisor_filter|urlencode) %}
+{% set fqs = "&project=" ~ (project_filter|urlencode) ~ "&supervisor=" ~ (supervisor_filter|urlencode) %}
+{% set qs = fqs ~ ("&covered=1" if view == "queue" and show_covered else "") %}
 <div class="ar-wrap" id="ar-wrap" data-theme-pref="{{ theme|e }}">
 
 	<div class="ar-top">
@@ -145,6 +148,7 @@
 
 	<form class="ar-filters" method="get" action="/attendance-review">
 		<input type="hidden" name="view" value="{{ view }}">
+		{% if view == "queue" and show_covered %}<input type="hidden" name="covered" value="1">{% endif %}
 		{% if view == "day" %}
 			<input type="hidden" name="date" value="{{ day }}">
 			<span class="ar-daynav">
@@ -179,6 +183,12 @@
 		{% else %}
 			<div class="ar-banner warn">Today's check-ins are still coming in; they count as complete after {{ cutoff }} or when you run processing "incl. today".</div>
 		{% endif %}
+	{% endif %}
+
+	{% if view == "queue" and hidden_covered %}
+		<div class="ar-banner">{{ hidden_covered }} more day(s) already have an Attendance made outside the app, so nothing is waiting on you there. <a href="/attendance-review?view=queue&covered=1{{ fqs }}">Show them</a></div>
+	{% elif view == "queue" and shown_covered %}
+		<div class="ar-banner">Showing {{ shown_covered }} day(s) that already have an Attendance. <a href="/attendance-review?view=queue{{ fqs }}">Hide them</a></div>
 	{% endif %}
 
 	{% if can_process %}
@@ -217,19 +227,20 @@
 			{% set ns.project = g.project_label %}
 			<div class="ar-projhead">{{ (g.project_label or "No project")|e }}</div>
 		{% endif %}
-		<div class="ar-card {{ g.state.lower() }}" data-employee="{{ g.employee|e }}" data-date="{{ g.date }}" tabindex="0">
+		{% set css = "covered" if g.state == "Already marked" else g.state.lower() %}
+		<div class="ar-card {{ css }}" data-employee="{{ g.employee|e }}" data-date="{{ g.date }}" tabindex="0">
 			<div class="ar-chead">
 				<div>
 					{% if can_process and g.pending_names %}<input type="checkbox" class="ar-pick-group" title="Select this day">{% else %}<span style="display:inline-block;width:13px"></span>{% endif %}
 				</div>
 				<div>
-					{% if g.image %}<img class="ar-avatar" src="{{ g.image|e }}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ar-avatar empty',textContent:'?'}))">{% else %}<span class="ar-avatar empty" title="No profile photo on the Employee record">?</span>{% endif %}
+					{% if g.image %}<img class="ar-avatar" src="{{ g.image|e }}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'ar-avatar empty',textContent:'?'}))">{% else %}<span class="ar-avatar empty" title="No profile photo on the Employee record">?</span>{% endif %}
 				</div>
 				<div>
 					<div class="ar-who">
 						<a class="name" href="/app/employee/{{ g.employee|urlencode }}">{{ g.employee_name|e }}</a>
 						<span class="id">{{ g.employee|e }}</span>
-						<span class="pill pill-state {{ g.state.lower() }}">{{ g.state }}</span>
+						<span class="pill pill-state {{ css }}">{{ g.state }}</span>
 					</div>
 					<div class="ar-times">
 						<span>{% if g.projects %}<b>{{ g.project_label|e }}</b>{% else %}<span class="bad">no project</span>{% endif %}</span>
@@ -262,6 +273,8 @@
 				{% for r in g.reasons %}<span class="chip {{ 'block' if r.blocking }}" title="{{ r.hint|e }}">{{ r.text|e }}</span>{% endfor %}
 			</div>
 			{% endif %}
+			<details class="ar-punches" {{ "open" if g.state == "Pending" }}>
+			<summary>{{ g.punches|length }} punch{{ "" if g.punches|length == 1 else "es" }}</summary>
 			<div class="ar-scroll">
 			<table class="ar">
 				<thead>
@@ -288,8 +301,8 @@
 						<td class="col-opt">
 							{% if r.custom_attendance_photo and (r.custom_attendance_photo.startswith('/files/') or r.custom_attendance_photo.startswith('/private/files/')) %}
 								<span class="thumb-pair">
-									<a href="{{ r.custom_attendance_photo|e }}" target="_blank" rel="noopener"><img class="thumb" src="{{ r.custom_attendance_photo|e }}" alt="" onerror="this.parentNode.replaceWith(document.createTextNode('—'))"></a>
-									{% if r.custom_face_match_result == "No Match" and g.image %}<span class="muted">vs</span><img class="thumb" src="{{ g.image|e }}" alt="" title="Profile photo" onerror="this.remove()">{% endif %}
+									<a href="{{ r.custom_attendance_photo|e }}" target="_blank" rel="noopener"><img class="thumb" src="{{ r.custom_attendance_photo|e }}" alt="" loading="lazy" decoding="async" onerror="this.parentNode.replaceWith(document.createTextNode('—'))"></a>
+									{% if r.custom_face_match_result == "No Match" and g.image %}<span class="muted">vs</span><img class="thumb" src="{{ g.image|e }}" alt="" title="Profile photo" loading="lazy" decoding="async" onerror="this.remove()">{% endif %}
 								</span>
 							{% else %}<span class="muted">—</span>{% endif %}
 						</td>
@@ -306,6 +319,7 @@
 				</tbody>
 			</table>
 			</div>
+			</details>
 		</div>
 		{% endfor %}
 	{% endfor %}

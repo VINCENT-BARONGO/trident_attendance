@@ -32,6 +32,9 @@ no_cache = 1
 STATUS_FILTERS = ["Pending", "Auto-Released", "Released", "Marked", "Rejected", "All"]
 QUEUE_DAYS = 30
 OPEN_STATUSES = (STATUS_PENDING, STATUS_RELEASED, STATUS_AUTO_RELEASED)
+# An employee-day whose punches are still open but which already has an Attendance made
+# elsewhere (the office tool, a terminal). Nothing is waiting on a reviewer there.
+STATE_COVERED = "Already marked"
 
 PUNCH_FIELDS = [
 	"name",
@@ -126,6 +129,10 @@ def get_context(context):
 	context.theme = (frappe.db.get_value("User", frappe.session.user, "desk_theme") or "Light").lower()
 	context.project_names = project_names
 	context.supervisor_names = supervisor_names
+	# The queue leaves out days that already have an Attendance unless asked: they outnumber
+	# the days that need a decision many times over, and drawing them all made the page crawl.
+	show_covered = view == "day" or bool(frappe.utils.cint(form.get("covered")))
+	context.show_covered = show_covered
 
 	if view == "queue":
 		rows = _queue_rows(settings)
@@ -137,8 +144,12 @@ def get_context(context):
 		r.time_str = get_datetime(r.time).strftime("%H:%M")
 		r.is_pending = r.custom_review_status == STATUS_PENDING and not r.attendance
 
-	days = _group_by_day(rows, status_filter, settings, project_filter, supervisor_filter, project_names, supervisor_names)
+	days, hidden_covered = _group_by_day(
+		rows, status_filter, settings, project_filter, supervisor_filter, project_names, supervisor_names, show_covered
+	)
 	context.days = days
+	context.hidden_covered = hidden_covered
+	context.shown_covered = sum(1 for d in days for g in d["groups"] if g["state"] == STATE_COVERED)
 	context.pending_groups = sum(1 for d in days for g in d["groups"] if g["state"] == "Pending")
 	context.shown_groups = sum(len(d["groups"]) for d in days)
 	context.stats = _stats(settings)
@@ -207,7 +218,28 @@ def _supervisors():
 	return rows
 
 
-def _group_by_day(rows, status_filter, settings, project_filter, supervisor_filter, project_names, supervisor_names):
+def _existing_attendance(rows) -> dict:
+	"""{(employee, date): Attendance} for the employee-days in `rows`, in one query."""
+	keys = {(r.employee, getdate(r.time)) for r in rows}
+	if not keys:
+		return {}
+	dates = [k[1] for k in keys]
+	found = frappe.get_all(
+		"Attendance",
+		filters={
+			"employee": ["in", sorted({k[0] for k in keys})],
+			"attendance_date": ["between", [min(dates), max(dates)]],
+			"docstatus": ["<", 2],
+		},
+		fields=["name", "employee", "attendance_date", "status"],
+	)
+	return {(a.employee, getdate(a.attendance_date)): a for a in found if (a.employee, getdate(a.attendance_date)) in keys}
+
+
+def _group_by_day(
+	rows, status_filter, settings, project_filter, supervisor_filter, project_names, supervisor_names, show_covered=True
+):
+	"""The employee-days to draw, newest day first, and how many covered days were left out."""
 	groups = {}
 	for r in rows:
 		key = (getdate(r.time), r.employee)
@@ -241,24 +273,37 @@ def _group_by_day(rows, status_filter, settings, project_filter, supervisor_filt
 			"Rejected": {STATUS_REJECTED},
 		}[status_filter]
 
-	employee_images = _employee_images({g["employee"] for g in groups.values()})
-
-	days = {}
+	existing = _existing_attendance(rows)
+	hidden_covered = 0
+	shown = []
 	for (day, _employee), g in groups.items():
-		punches = g["punches"]
 		# Filters apply to whole employee-days, after the day was assembled, so a day is never
 		# evaluated on a partial set of punches.
 		if project_filter and project_filter not in g["projects"]:
 			continue
 		if supervisor_filter and supervisor_filter not in g["owners"]:
 			continue
-		statuses = {p.custom_review_status for p in punches}
-		if wanted and not (statuses & wanted):
+		g["statuses"] = {p.custom_review_status for p in g["punches"]}
+		if wanted and not (g["statuses"] & wanted):
 			continue
+		g["attendance"] = next((p.attendance for p in g["punches"] if p.attendance), None)
+		g["covered"] = None if g["attendance"] else existing.get((g["employee"], day))
+		if g["covered"] and not show_covered:
+			hidden_covered += 1
+			continue
+		shown.append((day, g))
 
-		g["attendance"] = next((p.attendance for p in punches if p.attendance), None)
+	employee_images = _employee_images({g["employee"] for _day, g in shown})
+
+	days = {}
+	for day, g in shown:
+		punches = g["punches"]
+		statuses = g["statuses"]
+		covered = g["covered"]
 		if g["attendance"]:
 			g["state"] = "Marked"
+		elif covered and STATUS_PENDING in statuses:
+			g["state"] = STATE_COVERED
 		elif STATUS_PENDING in statuses:
 			g["state"] = "Pending"
 		elif statuses & {STATUS_RELEASED, STATUS_AUTO_RELEASED}:
@@ -296,7 +341,10 @@ def _group_by_day(rows, status_filter, settings, project_filter, supervisor_filt
 			for reason in strip_prefixes(split_reasons(p.custom_hold_reasons), DAY_PREFIXES):
 				if reason not in reasons:
 					reasons.append(reason)
-		if g["state"] == "Pending" and live:
+		if g["state"] == STATE_COVERED:
+			# evaluate_day would say the same after a query or two per day; the map already knows.
+			reasons.append(f"{ALREADY_MARKED_PREFIX} {covered.name} ({covered.status})")
+		elif g["state"] == "Pending" and live:
 			try:
 				for reason in evaluate_day(live, day, settings):
 					if reason not in reasons:
@@ -307,7 +355,7 @@ def _group_by_day(rows, status_filter, settings, project_filter, supervisor_filt
 		g["blocking"] = [r["text"] for r in g["reasons"] if r["blocking"]]
 		g["can_release"] = g["state"] == "Pending" and bool(g["pending_names"]) and not g["missing_out"] and bool(ins)
 
-		g["existing_attendance"] = g["attendance"]
+		g["existing_attendance"] = g["attendance"] or (covered.name if covered else None)
 		for reason in reasons:
 			if reason.startswith(ALREADY_MARKED_PREFIX):
 				m = re.search(r"marked:\s*([^\s(]+)", reason)
@@ -316,7 +364,7 @@ def _group_by_day(rows, status_filter, settings, project_filter, supervisor_filt
 
 		days.setdefault(day, []).append(g)
 
-	order = {"Pending": 0, "Released": 1, "Marked": 2, "Unstaged": 3, "Rejected": 4}
+	order = {"Pending": 0, "Released": 1, STATE_COVERED: 2, "Marked": 3, "Unstaged": 4, "Rejected": 5}
 	out = []
 	for day in sorted(days, reverse=True):
 		items = sorted(days[day], key=lambda g: (order[g["state"]], g["project_label"], g["employee_name"] or ""))
@@ -330,7 +378,7 @@ def _group_by_day(rows, status_filter, settings, project_filter, supervisor_filt
 				"projects": sorted({g["project_label"] for g in items if g["state"] == "Pending"}),
 			}
 		)
-	return out
+	return out, hidden_covered
 
 
 def _employee_images(employees) -> dict:
