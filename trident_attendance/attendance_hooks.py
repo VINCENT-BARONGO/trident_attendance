@@ -39,7 +39,7 @@ def after_insert(doc, method=None):
 	try:
 		doc.add_comment(
 			"Comment",
-			_("Worked at more than one site: {0}. Project set from the first check-in.").format(", ".join(projects)),
+			_("Worked at more than one site: {0}. Project set from the last check-out.").format(", ".join(projects)),
 		)
 	except Exception:
 		frappe.log_error(title="trident_attendance: mixed-projects comment failed")

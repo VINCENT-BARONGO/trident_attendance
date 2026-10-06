@@ -34,7 +34,7 @@ date; working hours run from the **first IN to the last OUT** (hrms's own
    already exists.
 3. A day with no blocking reason is released and **marked immediately**: one submitted
    `Attendance` with `working_hours`, `in_time`, `out_time` and `custom_project` (the
-   project of the first IN), and the check-ins linked to it.
+   project of the last OUT), and the check-ins linked to it.
 4. Anything else waits on **/attendance-review**, where an `Attendance Admin` can
    release, reject, move a punch to another project, add a missing OUT, or cancel and
    rebuild a day.
