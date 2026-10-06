@@ -352,8 +352,11 @@ def mark_day(logs: list, day, settings=None, day_reasons=None, instant=None) -> 
 	for l in logs:
 		if l.custom_site_project and l.custom_site_project not in projects:
 			projects.append(l.custom_site_project)
-	first_in = next((l for l in logs if l.log_type == "IN" and l.custom_site_project), None)
-	project = (first_in.custom_site_project if first_in else None) or (projects[0] if projects else None)
+	# The day belongs to where it ended: someone who clocks in at one site and out at another
+	# spent the day getting to the second. With no clock-out carrying a project, the last punch
+	# that names one decides.
+	last_out = next((l for l in reversed(logs) if l.log_type == "OUT" and l.custom_site_project), None)
+	project = (last_out.custom_site_project if last_out else None) or (projects[-1] if projects else None)
 	if not project:
 		project = frappe.db.get_value("Employee", logs[0].employee, "custom_project")
 
@@ -498,11 +501,14 @@ def _create_auto_checkout(open_logs, day, settings) -> bool:
 	out_time = combine_datetime(day, settings.auto_checkout_time or "17:00:00")
 	if out_time <= get_datetime(first_in.time) or out_time > now_datetime():
 		return False
+	# The check-out is made up, so it stands where the person was last seen: the day's project
+	# comes from the last clock-out (mark_day), and this one must not send it back to the first site.
+	last_seen = next((l for l in reversed(ins) if l.custom_site_project), first_in)
 	create_internal_punch(
 		employee=first_in.employee,
 		log_type="OUT",
 		time=out_time,
-		project=first_in.custom_site_project,
+		project=last_seen.custom_site_project,
 		logged_by=first_in.custom_logged_by,
 		source=f"{INTERNAL_SOURCE_PREFIX}auto-checkout",
 	)

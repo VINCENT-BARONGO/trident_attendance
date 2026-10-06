@@ -71,7 +71,7 @@ REASON_HINTS = {
 	"OUT before IN": _("The last OUT is earlier than the first IN. Fix the punch times."),
 	"Supervisor not checked in first": _("The supervisor must check themselves in (face Matched) before workers."),
 	"Supervisor not checked out first": _("The supervisor must check themselves out before workers."),
-	"Mixed projects:": _("Worked at more than one site; the first IN's project is used."),
+	"Mixed projects:": _("Worked at more than one site; the last OUT's project is used."),
 	"Attendance already marked:": _("An Attendance already exists for this day. Cancel & re-mark rebuilds it from the punches."),
 	"Rejected:": _("Rejected by a reviewer."),
 }
