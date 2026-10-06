@@ -21,8 +21,27 @@ class TridentAttendanceSettings(Document):
 		if cint(self.auto_checkout) and self.auto_checkout_time and self.day_cutoff_time:
 			if get_time(self.auto_checkout_time) > get_time(self.day_cutoff_time):
 				frappe.throw(_("Auto Checkout Time must not be later than Day Cutoff Time, or the OUT would be created in the future."))
+		self.validate_employee_access()
 		if not cint(self.hold_on_missing_out) and not cint(self.auto_checkout):
 			frappe.msgprint(
 				_("Days with a missing OUT will be released with 0 hours: neither 'Hold on Missing OUT' nor 'Auto Checkout' is on."),
 				indicator="orange",
 			)
+
+	def validate_employee_access(self):
+		"""Who the hub is and which client its tokens are for decide who can be signed in as an
+		employee. An Attendance Admin or HR Manager can save the rest of this page; naming
+		themselves here would let them issue those sign-ins."""
+		before = self.get_doc_before_save()
+		for field in ("hub_service_user", "employee_token_client"):
+			if (self.get(field) or None) == ((before.get(field) if before else None) or None):
+				continue
+			if "System Manager" not in frappe.get_roles():
+				frappe.throw(
+					_("Only a System Manager can change {0}.").format(self.meta.get_label(field)),
+					frappe.PermissionError,
+				)
+		# Empty on a site that had these settings before the field existed.
+		self.helper_token_minutes = cint(self.helper_token_minutes) or 10
+		if not 1 <= self.helper_token_minutes <= 60:
+			frappe.throw(_("{0} must be between 1 and 60.").format(self.meta.get_label("helper_token_minutes")))

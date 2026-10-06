@@ -71,7 +71,8 @@ reject (`custom_logged_by` as an email, face labels outside the Select options).
 
 ### What the app provides
 
-**Custom fields** — `Employee.custom_id_number / custom_verified / custom_project`;
+**Custom fields** — `Employee.custom_id_number / custom_verified / custom_project /
+custom_app_access`;
 `Project.custom_site_latitude / custom_site_longitude / custom_geofence_radius_meters`;
 `Employee Checkin.custom_site_project / custom_id_number_scanned / custom_mrz_raw /
 custom_face_match_result / custom_face_match_score / custom_logged_by /
@@ -116,6 +117,70 @@ retention.
 Both jobs are `scheduler_events` hooks rather than Server Scripts: Server Scripts need
 `server_script_enabled` in `common_site_config.json`, which Frappe Cloud disables on
 shared plans.
+
+### Employee app access (sign-in without an ERP password)
+
+Employees open the app and My HR with ID card and face. The attendance hub does the check
+on its own server and then asks this site for an ERP OAuth token for that employee's own
+user. Supervisors keep their ERP sign-in.
+
+**Settings** (Trident Attendance Settings > Employee App Access):
+
+| Setting | Meaning |
+|---|---|
+| Hub Service User | The hub's own login. Only this user can call the methods below, and it must hold `Attendance Admin` (or System Manager). Empty = nobody can. |
+| Employee Token OAuth Client | The OAuth Client the tokens are issued for. It needs "Skip Authorization" ticked. Empty = no tokens are issued. |
+| Helper Token (minutes) | Life of a borrowed-phone token. Default 10, at most 60. |
+
+Only a System Manager can change the first two. `Employee > App Access`
+(`custom_app_access`) is HR's switch per employee; no token is issued without it.
+
+**One user per employee.** Each employee needs an ERP user holding only the self-service
+roles, linked on the Employee. `provision_ess_users` creates
+`<employee id>@staff.<domain>` for every Active employee without a user: no welcome
+e-mail, a random password nobody is told, the Employee link and user permissions, then
+the `Employee Self Service` role. Employees who already have a user are skipped and that
+user is not changed, so it can be run again.
+
+```bash
+# Dry run (the default): changes nothing, lists what it would create
+bench --site <site> execute trident_attendance.provision.provision_ess_users \
+    --kwargs "{'domain': 'example.co.ke'}"
+
+# Create them, for one company, and tick App Access on those employees
+bench --site <site> execute trident_attendance.provision.provision_ess_users \
+    --kwargs "{'domain': 'example.co.ke', 'dry_run': 0, 'company': 'Trident Plumbers Ltd', 'enable_app_access': 1}"
+
+# Only some employees
+bench --site <site> execute trident_attendance.provision.provision_ess_users \
+    --kwargs "{'domain': 'example.co.ke', 'dry_run': 0, 'employees': ['HR-EMP-00001', 'HR-EMP-00002']}"
+```
+
+It returns one row per employee: `would create`, `created`, `skipped: ...` or
+`failed: ...`. A failure undoes that employee only. Run it on a copy of the site first.
+
+**Hub-only methods** (`trident_attendance.employee_access`). None is open to guests. Any
+caller other than the Hub Service User gets HTTP 403 with `exc_type: HubOnlyError`. Every
+other refusal is a normal answer: `{"ok": false, "reason": "<code>", "message": "..."}`.
+
+| Method | Purpose |
+|---|---|
+| `get_employee_for_verification(id_number)` | The one Active employee with this ID number: `employee`, `employee_name`, `has_photo`, `has_user`, `user_enabled`, `app_access`, `can_verify`, `reason`. Refuses `not_found`, `employee_inactive`, `ambiguous` (two Active employees share the number), `id_number_required`. |
+| `get_verification_photo(employee)` | The Active employee's photo as raw image bytes. 404 when there is none. |
+| `issue_employee_token(employee, kind, device)` (POST) | `kind=own`: a 3600 s access token and a refresh token, after revoking every token the user holds. `kind=helper`: a short access token, no refresh token, nothing revoked. Returns `access_token`, `refresh_token`, `expires_in`, `user`, `employee`. |
+| `revoke_employee_tokens(employee)` (POST) | Revokes every Active OAuth token of the employee's user, whichever client holds it, and any sign-in code not yet exchanged. Returns `revoked`. |
+
+`issue_employee_token` refuses with: `invalid_kind`, `employee_not_found`,
+`employee_inactive`, `app_access_off`, `no_user`, `user_disabled`,
+`user_has_other_roles` (the user holds anything beyond `Employee` and
+`Employee Self Service`: a supervisor, a manager or a System Manager is never issued a
+token this way), `oauth_client_not_set`, `oauth_client_missing`,
+`oauth_client_no_scopes`. `get_employee_for_verification` reports the same reasons, and
+`no_photo`, in `reason` with `can_verify: false`.
+
+Tests: `bench --site <site> run-tests --app trident_attendance`. On a bench whose
+installed copy of the app is another branch, `scripts/run_tests_from_src.py` runs this
+checkout's tests instead (see the file).
 
 ### Site requirements
 

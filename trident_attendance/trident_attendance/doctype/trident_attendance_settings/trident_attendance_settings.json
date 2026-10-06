@@ -36,7 +36,12 @@
   "auto_checkout",
   "auto_checkout_time",
   "retention_section",
-  "photo_retention_days"
+  "photo_retention_days",
+  "employee_access_section",
+  "hub_service_user",
+  "employee_token_client",
+  "column_break_employee_access",
+  "helper_token_minutes"
  ],
  "fields": [
   {
@@ -233,12 +238,43 @@
    "fieldname": "photo_retention_days",
    "fieldtype": "Int",
    "label": "Photo Retention (days)"
+  },
+  {
+   "description": "Employees sign in to the app with ID card and face, checked by the attendance hub. Only a System Manager can change the two fields on the left.",
+   "fieldname": "employee_access_section",
+   "fieldtype": "Section Break",
+   "label": "Employee App Access"
+  },
+  {
+   "description": "The attendance hub's own login. Only this user can ask for an employee's token, and it must hold the Attendance Admin role. Empty = nobody can.",
+   "fieldname": "hub_service_user",
+   "fieldtype": "Link",
+   "label": "Hub Service User",
+   "options": "User"
+  },
+  {
+   "description": "The OAuth Client employee tokens are issued for. It needs \"Skip Authorization\" ticked. Empty = no tokens are issued.",
+   "fieldname": "employee_token_client",
+   "fieldtype": "Link",
+   "label": "Employee Token OAuth Client",
+   "options": "OAuth Client"
+  },
+  {
+   "fieldname": "column_break_employee_access",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "10",
+   "description": "How long a borrowed-phone session lasts. 1 to 60.",
+   "fieldname": "helper_token_minutes",
+   "fieldtype": "Int",
+   "label": "Helper Token (minutes)"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-01 15:30:00.000000",
+ "modified": "2026-10-06 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",
