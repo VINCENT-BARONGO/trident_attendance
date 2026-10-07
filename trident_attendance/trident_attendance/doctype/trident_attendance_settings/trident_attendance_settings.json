@@ -41,7 +41,8 @@
   "hub_service_user",
   "employee_token_client",
   "column_break_employee_access",
-  "helper_token_minutes"
+  "helper_token_minutes",
+  "allow_face_sign_in"
  ],
  "fields": [
   {
@@ -240,7 +241,7 @@
    "label": "Photo Retention (days)"
   },
   {
-   "description": "Employees sign in to the app with ID card and face, checked by the attendance hub. Only a System Manager can change the two fields on the left.",
+   "description": "Employees sign in to the app with their ID number, a 6-digit PIN and a code sent to their phone. Only a System Manager can change the two fields on the left.",
    "fieldname": "employee_access_section",
    "fieldtype": "Section Break",
    "label": "Employee App Access"
@@ -269,12 +270,19 @@
    "fieldname": "helper_token_minutes",
    "fieldtype": "Int",
    "label": "Helper Token (minutes)"
+  },
+  {
+   "default": "0",
+   "description": "The older sign-in by ID card and face. Leave it off: while it is on, the hub can be issued an employee's token without a PIN or a code. Only a System Manager can change it.",
+   "fieldname": "allow_face_sign_in",
+   "fieldtype": "Check",
+   "label": "Allow Face Sign-in"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-06 12:00:00.000000",
+ "modified": "2026-10-07 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",

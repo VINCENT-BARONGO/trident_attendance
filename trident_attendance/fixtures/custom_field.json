@@ -1547,7 +1547,7 @@
   "columns": 0,
   "default": "0",
   "depends_on": null,
-  "description": "The employee may sign in to the employee app with ID card and face, without an ERP password.",
+  "description": "The employee may sign in to the employee app with their ID number, a PIN and a code sent to their phone, without an ERP password.",
   "docstatus": 0,
   "doctype": "Custom Field",
   "dt": "Employee",

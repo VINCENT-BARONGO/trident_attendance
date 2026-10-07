@@ -37,7 +37,7 @@ def make_user(email, roles=()):
 	return user.insert(ignore_permissions=True)
 
 
-def make_employee(first_name, id_number=None, user=None, app_access=1, status="Active"):
+def make_employee(first_name, id_number=None, user=None, app_access=1, status="Active", **fields):
 	doc = frappe.get_doc(
 		{
 			"doctype": "Employee",
@@ -51,6 +51,7 @@ def make_employee(first_name, id_number=None, user=None, app_access=1, status="A
 			"user_id": user,
 			employee_id_field(): id_number,
 			APP_ACCESS_FIELD: app_access,
+			**fields,
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -89,6 +90,12 @@ def set_settings(**values):
 	for field, value in values.items():
 		frappe.db.set_single_value(SETTINGS_DOCTYPE, field, value)
 	frappe.clear_document_cache(SETTINGS_DOCTYPE, SETTINGS_DOCTYPE)
+
+
+def set_sms_gateway(url="https://sms.tok-test.example/send"):
+	"""SMS Settings as a site with a gateway has them. Tests patch the request itself."""
+	for field, value in (("sms_gateway_url", url), ("message_parameter", "message"), ("receiver_parameter", "to")):
+		frappe.db.set_single_value("SMS Settings", field, value)
 
 
 def attach_photo(employee):

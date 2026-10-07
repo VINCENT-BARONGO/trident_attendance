@@ -1,0 +1,83 @@
+{
+ "actions": [],
+ "autoname": "field:employee",
+ "creation": "2026-10-07 12:00:00.000000",
+ "description": "Kept by the employee app's sign-in. Not for editing: no role has access.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "code_hash",
+  "code_purpose",
+  "code_expires_at",
+  "code_wrong_tries",
+  "codes_sent_at",
+  "wrong_pins_at",
+  "pin_locked_until"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Data",
+   "label": "Employee",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "code_hash",
+   "fieldtype": "Data",
+   "label": "Code Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "code_purpose",
+   "fieldtype": "Data",
+   "label": "Code Purpose",
+   "read_only": 1
+  },
+  {
+   "fieldname": "code_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Code Expires At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "code_wrong_tries",
+   "fieldtype": "Int",
+   "label": "Code Wrong Tries",
+   "read_only": 1
+  },
+  {
+   "fieldname": "codes_sent_at",
+   "fieldtype": "Small Text",
+   "label": "Codes Sent At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "wrong_pins_at",
+   "fieldtype": "Small Text",
+   "label": "Wrong PINs At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "pin_locked_until",
+   "fieldtype": "Datetime",
+   "label": "PIN Locked Until",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-10-07 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Employee App Sign In",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [],
+ "read_only": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -120,20 +120,50 @@ shared plans.
 
 ### Employee app access (sign-in without an ERP password)
 
-Employees open the app and My HR with ID card and face. The attendance hub does the check
-on its own server and then asks this site for an ERP OAuth token for that employee's own
-user. Supervisors keep their ERP sign-in.
+Employees open the app and My HR with their ID number, a 6-digit PIN and a one-time code
+sent to their phone. The attendance hub passes each step on to this site, which checks the
+PIN and the code and then hands the hub an ERP OAuth token for that employee's own user.
+Supervisors keep their ERP sign-in.
 
 **Settings** (Trident Attendance Settings > Employee App Access):
 
 | Setting | Meaning |
 |---|---|
-| Hub Service User | The hub's own login. Only this user can call the methods below, and it must hold `Attendance Admin` (or System Manager). Empty = nobody can. |
+| Hub Service User | The hub's own login. Only this user can call the hub-only methods below, and it must hold `Attendance Admin` (or System Manager). Empty = nobody can. |
 | Employee Token OAuth Client | The OAuth Client the tokens are issued for. It needs "Skip Authorization" ticked. Empty = no tokens are issued. |
 | Helper Token (minutes) | Life of a borrowed-phone token. Default 10, at most 60. |
+| Allow Face Sign-in | Off by default; leave it off. On, the older methods that issue a token after the hub's face check answer again, with no PIN and no code. |
 
-Only a System Manager can change the first two. `Employee > App Access`
-(`custom_app_access`) is HR's switch per employee; no token is issued without it.
+Only a System Manager can change the first two and the last. `Employee > App Access`
+(`custom_app_access`) is HR's switch per employee; no code is sent and no token is issued
+without it.
+
+**Where the code goes.** By SMS to `Employee > Mobile` (`cell_number`), through the site's
+own `SMS Settings` gateway. Kenyan numbers may be written `07..`, `01..`, `2547..` or
+`+2547..`; they are sent as `2547..`. With no usable mobile number, or no SMS gateway on the
+site, the code goes by e-mail to the employee's own address: `prefered_email`, else
+`personal_email`, else `company_email`, never the `@staff.` address of a provisioned user.
+The message is not kept: no SMS Log row and no Email Queue row.
+
+**The rules.**
+
+- PIN: exactly 6 digits; not one digit repeated, not a straight run up or down (`123456`,
+  `987654`, `012345`, also `890123`), not the last 6 digits of the ID number. Kept as a hash
+  in `__Auth` on the Employee. It is not the user's password, which stays random and unknown.
+- Code: 6 digits, good for 5 minutes, for one use and one purpose, 5 wrong tries. Asking
+  again replaces it. At most 3 codes in 15 minutes and 10 in 24 hours per employee.
+- 5 wrong PINs in an hour lock that employee's PIN for an hour. While it is locked the right
+  PIN is refused too. Choosing a new PIN, or HR's reset, lifts the lock.
+
+**What HR does.** Tick `App Access` on the Employee, check the mobile number, and tell the
+employee: "Open the app, choose *I am an employee*, enter your ID number, then *First time
+here, or forgot your PIN?* You get a code on your phone; enter it and choose a PIN." From
+then on they sign in with the ID number, the PIN and a new code each time. The Employee form
+shows whether an app PIN has been chosen, and a **Reset App PIN** button (HR Manager, HR
+User, Attendance Admin, System Manager; only when App Access is ticked). The reset clears
+the PIN and any code on its way, lifts a lock and signs the employee out everywhere; they
+choose a new PIN the same way as the first time. An employee who forgot the PIN does not
+need HR for that, only a phone that still gets the code.
 
 **One user per employee.** Each employee needs an ERP user holding only the self-service
 roles, linked on the Employee. `provision_ess_users` creates
@@ -162,21 +192,55 @@ It returns one row per employee: `would create`, `created`, `skipped: ...` or
 **Hub-only methods** (`trident_attendance.employee_access`). None is open to guests. Any
 caller other than the Hub Service User gets HTTP 403 with `exc_type: HubOnlyError`. Every
 other refusal is a normal answer: `{"ok": false, "reason": "<code>", "message": "..."}`.
+The hub sends the PIN and the code in the POST body, never in the URL.
 
 | Method | Purpose |
 |---|---|
-| `get_employee_for_verification(id_number)` | The one Active employee with this ID number: `employee`, `employee_name`, `has_photo`, `has_user`, `user_enabled`, `app_access`, `can_verify`, `reason`. Refuses `not_found`, `employee_inactive`, `ambiguous` (two Active employees share the number), `id_number_required`. |
-| `get_verification_photo(employee)` | The Active employee's photo as raw image bytes. 404 when there is none. |
-| `issue_employee_token(employee, kind, device)` (POST) | `kind=own`: a 3600 s access token and a refresh token, after revoking every token the user holds. `kind=helper`: a short access token, no refresh token, nothing revoked. Returns `access_token`, `refresh_token`, `expires_in`, `user`, `employee`. |
+| `begin_employee_sign_in(id_number, purpose, pin)` (POST) | `purpose=sign_in`: checks the PIN, then sends a code. `purpose=set_pin` (first time, or forgot PIN): sends a code; `pin` is ignored. Returns `employee`, `employee_name`, `channel` (`sms` or `email`), `destination` (masked: `07•• ••• 123`, `v•••@gmail.com`), `expires_in` (300). |
+| `complete_employee_sign_in(employee, purpose, code, kind, new_pin, device)` (POST) | Takes the code and issues the token. `kind=own`: a 3600 s access token and a refresh token, after revoking every token the user holds. `kind=helper`: a short access token, no refresh token. `purpose=set_pin` needs `new_pin`, saves it and revokes every earlier token whatever the `kind`. Returns `access_token`, `refresh_token` (null for helper), `expires_in`, `user`, `employee`, `employee_name`, `pin_set` (true when this call saved a PIN). |
 | `revoke_employee_tokens(employee)` (POST) | Revokes every Active OAuth token of the employee's user, whichever client holds it, and any sign-in code not yet exchanged. Returns `revoked`. |
 
-`issue_employee_token` refuses with: `invalid_kind`, `employee_not_found`,
-`employee_inactive`, `app_access_off`, `no_user`, `user_disabled`,
-`user_has_other_roles` (the user holds anything beyond `Employee` and
-`Employee Self Service`: a supervisor, a manager or a System Manager is never issued a
-token this way), `oauth_client_not_set`, `oauth_client_missing`,
-`oauth_client_no_scopes`. `get_employee_for_verification` reports the same reasons, and
-`no_photo`, in `reason` with `can_verify: false`.
+`begin_employee_sign_in` refuses with: `id_number_required`, `invalid_purpose`,
+`not_found`, `ambiguous` (two Active employees share the number), `employee_inactive`,
+`app_access_off`, `no_user`, `user_disabled`, `user_has_other_roles` (the user holds
+anything beyond `Employee` and `Employee Self Service`: a supervisor, a manager or a System
+Manager is never signed in this way), `oauth_client_not_set`, `oauth_client_missing`,
+`oauth_client_no_scopes`, `pin_required`, `pin_not_set`, `wrong_pin`, `pin_locked` (with
+`retry_after` seconds; the fifth wrong PIN answers this too), `no_contact`,
+`too_many_codes` (with `retry_after`), `send_failed` (the gateway or the mail server
+refused; no code is left behind and it does not count toward the limit).
+
+`complete_employee_sign_in` refuses with: `invalid_kind`, `invalid_purpose`,
+`employee_not_found`, `no_code` (none pending for that purpose, or it expired),
+`wrong_code` (with `tries_left`), `too_many_code_tries` (the fifth wrong code; ask for a new
+one), `pin_invalid`, `pin_too_simple`, and the employee, user and OAuth client reasons
+above. `pin_invalid` and `pin_too_simple` leave the code usable, so the same code can come
+again with a better PIN.
+
+An error nobody planned for answers HTTP 500 with `reason: server_error` and is logged
+without the request's values. Raised the usual way, Frappe would write the PIN and the code
+to the Error Log.
+
+**For HR, not the hub** (a role decides: HR Manager, HR User, Attendance Admin or System
+Manager, and an employee the caller may open; anyone else gets HTTP 403):
+
+| Method | Purpose |
+|---|---|
+| `reset_employee_pin(employee)` (POST) | Behind the Reset App PIN button. Clears the PIN and any pending code, lifts the PIN lock, revokes every token. Returns `had_pin`, `revoked`. |
+| `get_employee_pin_status(employee)` | For the Employee form: `pin_set`, `pin_locked`. Never the PIN or its hash. |
+
+**Face methods, switched off.** `get_employee_for_verification(id_number)`,
+`get_verification_photo(employee)` and `issue_employee_token(employee, kind, device)` are
+the earlier sign-in by ID card and face. Unless `Allow Face Sign-in` is ticked each answers
+`{"ok": false, "reason": "face_sign_in_off"}` (the photo method too, in place of the
+image).
+
+**Where the state lives.** The PIN hash is in `__Auth`. The pending code (a keyed hash), the
+PIN lock and the times codes were sent are one row per employee in `Employee App Sign In`,
+a doctype no role can read. Not in the cache: `bench migrate` and `bench clear-cache` empty
+it, which would lift every lock. Both hashes are mixed with the site's `encryption_key`, so
+a copy of the database alone does not give the PINs away; a site restored without its
+`site_config.json` key has every employee choose a PIN again.
 
 Tests: `bench --site <site> run-tests --app trident_attendance`. On a bench whose
 installed copy of the app is another branch, `scripts/run_tests_from_src.py` runs this

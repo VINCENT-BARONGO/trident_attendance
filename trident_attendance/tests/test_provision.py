@@ -100,7 +100,9 @@ class TestProvisionEssUsers(FrappeTestCase):
 		self.assertEqual(frappe.db.get_value("Employee", self.one, "custom_app_access"), 1)
 		self.assertFalse(frappe.db.get_value("Employee", self.two, "custom_app_access"))
 		hub = helpers.make_user(f"hub@{DOMAIN}", roles=["Attendance Admin"]).name
-		helpers.set_settings(hub_service_user=hub, employee_token_client=helpers.make_oauth_client().name)
+		helpers.set_settings(
+			hub_service_user=hub, employee_token_client=helpers.make_oauth_client().name, allow_face_sign_in=1
+		)
 		frappe.set_user(hub)
 		result = issue_employee_token(self.one, "own")
 		self.assertTrue(result["ok"], result)

@@ -31,9 +31,10 @@ class TridentAttendanceSettings(Document):
 	def validate_employee_access(self):
 		"""Who the hub is and which client its tokens are for decide who can be signed in as an
 		employee. An Attendance Admin or HR Manager can save the rest of this page; naming
-		themselves here would let them issue those sign-ins."""
+		themselves here would let them issue those sign-ins. The face sign-in switch is kept
+		with them: on, it takes the PIN and the code out of the way."""
 		before = self.get_doc_before_save()
-		for field in ("hub_service_user", "employee_token_client"):
+		for field in ("hub_service_user", "employee_token_client", "allow_face_sign_in"):
 			if (self.get(field) or None) == ((before.get(field) if before else None) or None):
 				continue
 			if "System Manager" not in frappe.get_roles():

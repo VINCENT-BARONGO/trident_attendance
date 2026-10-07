@@ -9,6 +9,8 @@ from frappe.utils import now_datetime
 from trident_attendance import employee_access
 from trident_attendance.employee_access import (
 	HubOnlyError,
+	begin_employee_sign_in,
+	complete_employee_sign_in,
 	get_employee_for_verification,
 	get_verification_photo,
 	issue_employee_token,
@@ -35,12 +37,20 @@ def refreshable(refresh_token) -> bool:
 
 
 class EmployeeAccessCase(FrappeTestCase):
+	# The face-era methods answer `face_sign_in_off` unless the setting is ticked.
+	FACE_SIGN_IN = 0
+
 	def setUp(self):
 		super().setUp()
 		self.addCleanup(helpers.reset)
 		helpers.make_user(HUB, roles=["Attendance Admin"])
 		self.client = helpers.make_oauth_client().name
-		helpers.set_settings(hub_service_user=HUB, employee_token_client=self.client, helper_token_minutes=10)
+		helpers.set_settings(
+			hub_service_user=HUB,
+			employee_token_client=self.client,
+			helper_token_minutes=10,
+			allow_face_sign_in=self.FACE_SIGN_IN,
+		)
 		self.employee, self.user = helpers.make_self_service_employee("Tokone", id_number=ID_NUMBER)
 		self.employee = self.employee.name
 		frappe.set_user(HUB)
@@ -62,6 +72,10 @@ class TestHubOnly(EmployeeAccessCase):
 			lambda: issue_employee_token(self.employee, "own"),
 			lambda: issue_employee_token(self.employee, "helper"),
 			lambda: revoke_employee_tokens(self.employee),
+			lambda: begin_employee_sign_in(ID_NUMBER, "set_pin"),
+			lambda: begin_employee_sign_in(ID_NUMBER, "sign_in", "135790"),
+			lambda: complete_employee_sign_in(self.employee, "set_pin", "123456", "own", "135790"),
+			lambda: complete_employee_sign_in(self.employee, "sign_in", "123456", "helper"),
 		)
 
 	def assertAllRefuse(self):
@@ -110,14 +124,25 @@ class TestHubOnly(EmployeeAccessCase):
 			get_verification_photo,
 			issue_employee_token,
 			revoke_employee_tokens,
+			begin_employee_sign_in,
+			complete_employee_sign_in,
 		):
 			self.assertIn(method, frappe.whitelisted)
 			self.assertNotIn(method, frappe.guest_methods)
 
+	def test_the_methods_that_change_things_are_post_only(self):
+		for method in (
+			issue_employee_token,
+			revoke_employee_tokens,
+			begin_employee_sign_in,
+			complete_employee_sign_in,
+		):
+			self.assertEqual(frappe.allowed_http_methods_for_whitelisted_func[method], ["POST"])
+
 	def test_only_a_system_manager_names_the_hub(self):
 		frappe.set_user("Administrator")
 		hr = helpers.make_user(f"hr@{helpers.TEST_DOMAIN}", roles=["HR Manager", "Attendance Admin"]).name
-		for field, value in (("hub_service_user", hr), ("employee_token_client", None)):
+		for field, value in (("hub_service_user", hr), ("employee_token_client", None), ("allow_face_sign_in", 1)):
 			frappe.set_user(hr)
 			settings = frappe.get_doc(SETTINGS_DOCTYPE)
 			settings.set(field, value)
@@ -127,6 +152,7 @@ class TestHubOnly(EmployeeAccessCase):
 		settings.photo_retention_days = 31
 		settings.save()
 		self.assertEqual(frappe.db.get_single_value(SETTINGS_DOCTYPE, "hub_service_user"), HUB)
+		self.assertFalse(frappe.db.get_single_value(SETTINGS_DOCTYPE, "allow_face_sign_in"))
 		frappe.set_user("Administrator")
 		settings = frappe.get_doc(SETTINGS_DOCTYPE)
 		settings.hub_service_user = hr
@@ -146,6 +172,8 @@ class TestHubOnly(EmployeeAccessCase):
 
 
 class TestGetEmployeeForVerification(EmployeeAccessCase):
+	FACE_SIGN_IN = 1
+
 	def with_photo(self):
 		frappe.set_user("Administrator")
 		file = helpers.attach_photo(self.employee)
@@ -234,6 +262,8 @@ class TestGetEmployeeForVerification(EmployeeAccessCase):
 
 
 class TestIssueEmployeeToken(EmployeeAccessCase):
+	FACE_SIGN_IN = 1
+
 	def test_own_token(self):
 		before = now_datetime()
 		result = issue_employee_token(self.employee, "own", device="test-phone")
@@ -395,6 +425,8 @@ class TestIssueEmployeeToken(EmployeeAccessCase):
 
 
 class TestRevokeEmployeeTokens(EmployeeAccessCase):
+	FACE_SIGN_IN = 1
+
 	def web_app_token(self):
 		"""A token the web app obtained for the same user through the ERP's sign-in step."""
 		return frappe.get_doc(
@@ -458,3 +490,39 @@ class TestRevokeEmployeeTokens(EmployeeAccessCase):
 			revoke_employee_tokens(self.employee),
 			{"ok": True, "employee": self.employee, "user": None, "revoked": 0},
 		)
+
+
+class TestFaceSignInSwitch(EmployeeAccessCase):
+	def face_calls(self):
+		return (
+			lambda: get_employee_for_verification(ID_NUMBER),
+			lambda: get_verification_photo(self.employee),
+			lambda: issue_employee_token(self.employee, "own"),
+			lambda: issue_employee_token(self.employee, "helper"),
+		)
+
+	def test_off_by_default_and_every_face_method_refuses(self):
+		self.assertEqual(frappe.get_meta(SETTINGS_DOCTYPE).get_field("allow_face_sign_in").default, "0")
+		for call in self.face_calls():
+			result = call()
+			self.assertRefused(result, "face_sign_in_off")
+			self.assertEqual(set(result), {"ok", "reason", "message"})
+		self.assertEqual(self.active_tokens(), 0)
+		# The photo method answers the same way, not with an image.
+		self.assertNotEqual(frappe.local.response.get("type"), "download")
+
+	def test_the_hub_gate_comes_first(self):
+		frappe.set_user(self.user)
+		for call in self.face_calls():
+			self.assertRaises(HubOnlyError, call)
+
+	def test_on_the_face_methods_work_again(self):
+		helpers.set_settings(allow_face_sign_in=1)
+		self.assertTrue(get_employee_for_verification(ID_NUMBER)["ok"])
+		self.assertRaises(frappe.DoesNotExistError, get_verification_photo, self.employee)
+		self.assertTrue(issue_employee_token(self.employee, "helper")["ok"])
+		helpers.set_settings(allow_face_sign_in=0)
+		self.assertRefused(issue_employee_token(self.employee, "helper"), "face_sign_in_off")
+
+	def test_revoking_does_not_depend_on_the_switch(self):
+		self.assertEqual(revoke_employee_tokens(self.employee)["revoked"], 0)

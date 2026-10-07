@@ -53,6 +53,12 @@ fixtures = [
 ]
 
 # ---------------------------------------------------------------------------
+# Form scripts for other apps' doctypes
+# ---------------------------------------------------------------------------
+
+doctype_js = {"Employee": "public/js/employee.js"}
+
+# ---------------------------------------------------------------------------
 # Controller override
 # ---------------------------------------------------------------------------
 # Frappe validates Link/Select values before any doc_event runs, on insert and on save. The
@@ -68,6 +74,10 @@ override_doctype_class = {
 # ---------------------------------------------------------------------------
 
 doc_events = {
+	"Employee": {
+		"on_trash": "trident_attendance.employee_pin.on_employee_trash",
+		"after_rename": "trident_attendance.employee_pin.after_employee_rename",
+	},
 	"Employee Checkin": {
 		"before_insert": "trident_attendance.checkin_hooks.before_insert",
 		"validate": "trident_attendance.checkin_hooks.validate",
