@@ -42,6 +42,7 @@ TESTS = [
 	"trident_attendance.tests.test_provision",
 	"trident_attendance.tests.test_announcements",
 	"trident_attendance.tests.test_push",
+	"trident_attendance.tests.test_own_records",
 ]
 
 
