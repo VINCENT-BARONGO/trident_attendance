@@ -246,6 +246,106 @@ Tests: `bench --site <site> run-tests --app trident_attendance`. On a bench whos
 installed copy of the app is another branch, `scripts/run_tests_from_src.py` runs this
 checkout's tests instead (see the file).
 
+### Announcements and push notifications
+
+The employee app's My HR shows company announcements under **News** and the phone gets a
+push notification (Firebase Cloud Messaging) for a new announcement, a leave decision and a
+new payslip, sent by this app from the ERP.
+
+**Announcements are Newsletters.** HR writes a Newsletter (Rich Text, Markdown or HTML) and
+ticks `Show in employee app` (`custom_app_announcement`, next to the subject). Nothing else
+about the newsletter matters: it need not be sent or published. The first time the box is
+ticked the time is kept on the newsletter (`custom_app_announced_at`, hidden); it is the
+announcement's date in the app and the reason the box can be unticked and ticked again
+without a second notification. Untick it to take the announcement down.
+
+`trident_attendance.announcements`, for any signed-in user (Guest gets 403). The box is the
+permission: Newsletter's own permissions are bypassed on purpose, so every employee reads
+every ticked newsletter and nothing else.
+
+| Method | Answer |
+|---|---|
+| `list_announcements(limit=50, offset=0)` | `{"ok": true, "items": [{"name", "subject", "shown_at", "summary"}]}`, newest first. `summary` is the first ~160 characters of the plain text. `limit` is at most 100. |
+| `get_announcement(name)` | `{"ok": true, "name", "subject", "shown_at", "html"}`. `html` is the message rendered on the ERP (Markdown rendered, the rest as written), cleaned with Frappe's HTML sanitiser (scripts and event handlers removed), with `/files/...` and `/private/files/...` links made absolute to this site's URL. A newsletter that is not ticked, or does not exist: `{"ok": false, "reason": "not_found"}` (HTTP 200, so the web app can tell it from a site without this backend). |
+
+**Devices.** The phone registers its FCM token after each sign-in and forgets it at
+sign-out, through `trident_attendance.push` (POST, any signed-in user; Guest gets 403):
+
+| Method | Answer |
+|---|---|
+| `register_app_device(token, platform="android", app_version=None)` | `{"ok": true}`. One `App Device` row per token: inserted, or updated when the token is known, with `user` = the caller, `enabled` = 1, `last_used` = now. A token another user registered moves to the caller (the phone changed hands). `token_invalid` (not 20 to 512 characters), `invalid_platform` (not `android` or `ios`). |
+| `unregister_app_device(token)` | `{"ok": true}`, whether or not there was a row. Only the caller's own row is deleted. |
+
+`App Device` (`user`, `token`, `platform`, `app_version`, `enabled`, `last_used`,
+`last_error`) is readable by System Managers only. A device Firebase no longer knows
+(`UNREGISTERED` / `NOT_FOUND`) is disabled with the answer in `last_error`; any other
+failure is noted there and the device kept. Registering again re-enables it.
+
+**Settings** (Trident Attendance Settings > Push Notifications):
+
+| Setting | Meaning |
+|---|---|
+| Push Notifications Enabled | Off (the default) = nothing is sent; phones still register. |
+| Firebase Service Account JSON | The Firebase project's service-account key, pasted as downloaded. Kept encrypted (a Password field). Only a System Manager can change it. Empty = the site_config key `fcm_service_account` is used (the JSON as a string, or the object itself). |
+
+**Actions > Send test notification to my devices** sends "Test notification" to the phones
+registered for the user who clicks (`trident_attendance.push.send_test_push`, POST, any
+signed-in user: `{"ok": true, "devices": <how many were queued>}`, or `push_disabled` /
+`no_service_account`). The answer says how many devices were queued, not whether Firebase
+accepted the message: that lands in `last_error` on the App Device row.
+
+**What sends a notification** (`hooks.doc_events`; each once per document, and never
+twice for the same decision):
+
+| Event | To whom | Title / body | Opens |
+|---|---|---|---|
+| Newsletter saved with `Show in employee app` turned on for the first time | every enabled device | "New announcement" / the subject | `/ess/announcements/<name>` |
+| Leave Application status becomes Approved or Rejected: on save, on submit, or on a submitted application | the employee's user's devices | "Leave approved" or "Leave rejected" / "<from> to <to>, <leave type>" | `/ess/leave` |
+| Salary Slip submitted | the employee's user's devices | "Payslip ready" / "<month year>" | `/ess/payslips/<name>` |
+| A new Leave Application, status Open | the leave approver named on it | "Leave request" / "<employee>: <from> to <to>, <leave type>" | `/ess/team` |
+| A Notification Log row (the ERP's bell: an assignment, a mention, a share, an alert rule; not energy points) | the user it is for | "Assigned to you" and the like / the ERP's own subject as plain text, 180 characters at most | `/ess/` |
+| A Workflow Action, status Open | everyone who holds a permitted role and has a registered phone, except whoever caused it | "Waiting for your approval" / "<doctype> <name>: <state>" | `/ess/` |
+
+The status told is kept on the Leave Application (`custom_app_notified_status`, hidden). An
+employee without a linked user gets nothing. A document name in a path is URL-encoded as one
+segment (`Sal%20Slip%2FHR-EMP-00001%2F00001`). A notification that cannot be queued is
+written to the Error Log as its type and never stops the HR document from being saved or
+submitted.
+
+**How it is sent.** FCM HTTP v1, `POST https://fcm.googleapis.com/v1/projects/<project_id>/messages:send`,
+one request per device with a 10 s timeout, from a background job on the `short` queue
+(queued after the HR document's transaction commits; up to 200 devices per job). The
+message is
+
+```json
+{"message": {"token": "<device token>",
+             "notification": {"title": "...", "body": "..."},
+             "data": {"url": "/ess/announcements/NL-0007", "kind": "announcement"},
+             "android": {"priority": "HIGH", "notification": {"channel_id": "trident_employee"}}}}
+```
+
+`data.url` is a path on the web app; `kind` is `announcement`, `leave`, `payslip` or
+`test`. The OAuth2 bearer (scope `https://www.googleapis.com/auth/firebase.messaging`) is
+made from the service account with `google-auth`, which Frappe itself depends on, and
+cached until five minutes before it expires. The logs hold kinds and counts only: no device
+token, no message body, and never the key, which is also kept out of the Error Log when
+something fails.
+
+**Firebase set-up** (one-off, by the owner):
+
+1. console.firebase.google.com > Add project "Trident Employee" (Analytics off).
+2. Add an Android app, package name `com.tridentplumbers.attendance`; download
+   `google-services.json` into the phone app's `apps/trident_employee/android/app/`. The
+   same Firebase Android app serves the Trident and Astral builds.
+3. Project settings > Service accounts > Generate new private key; paste the JSON into
+   Trident Attendance Settings > Firebase Service Account JSON on each ERP, tick Push
+   Notifications Enabled, save, then Actions > Send test notification to my devices from a
+   user whose phone is signed in to the app.
+
+Whoever holds the service-account key can send any registered phone any notification in
+the company's name: treat it like a password, and generate a new key in Firebase (and
+delete the old one there) if it leaks.
+
 ### Site requirements
 
 - `System Settings > Time Zone` must be `Africa/Nairobi` (the app posts handset-local

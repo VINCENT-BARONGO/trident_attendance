@@ -31,7 +31,7 @@ fixtures = [
 		"dt": "Custom Field",
 		"filters": [
 			["fieldname", "like", "custom_%"],
-			["dt", "in", ["Employee", "Employee Checkin", "Project", "HR Settings", "Attendance"]],
+			["dt", "in", ["Employee", "Employee Checkin", "Project", "HR Settings", "Attendance", "Newsletter", "Leave Application"]],
 			["name", "not in", ["Employee Checkin-custom_project", "Employee Checkin-custom_mobile_app_data"]],
 		],
 	},
@@ -86,6 +86,27 @@ doc_events = {
 		"before_insert": "trident_attendance.attendance_hooks.before_insert",
 		"after_insert": "trident_attendance.attendance_hooks.after_insert",
 		"before_cancel": "trident_attendance.attendance_hooks.before_cancel",
+	},
+	# Push notifications to the employee app. Each hook catches its own errors: a push that
+	# cannot be queued never stops an HR document from being saved or submitted.
+	"Newsletter": {
+		"on_update": "trident_attendance.push_hooks.newsletter_on_update",
+	},
+	"Leave Application": {
+		"after_insert": "trident_attendance.push_hooks.leave_application_after_insert",
+		"on_update": "trident_attendance.push_hooks.leave_application_status",
+		"on_submit": "trident_attendance.push_hooks.leave_application_status",
+		"on_update_after_submit": "trident_attendance.push_hooks.leave_application_status",
+	},
+	"Salary Slip": {
+		"on_submit": "trident_attendance.push_hooks.salary_slip_on_submit",
+	},
+	# Whatever waits for someone in the ERP: the bell's notifications and workflow steps.
+	"Notification Log": {
+		"after_insert": "trident_attendance.push_hooks.notification_log_after_insert",
+	},
+	"Workflow Action": {
+		"after_insert": "trident_attendance.push_hooks.workflow_action_after_insert",
 	},
 }
 

@@ -61,6 +61,15 @@ def employee_for_user(user: str | None) -> str | None:
 	return frappe.db.get_value("Employee", {"user_id": user, "status": "Active"}, "name")
 
 
+def require_signed_in() -> str:
+	"""The session user, for a method open to anyone who is signed in. Guest is refused with a
+	403 even when the method is called from Python, where the whitelist does not look."""
+	user = frappe.session.user
+	if not user or user == "Guest":
+		frappe.throw(frappe._("Sign in first."), frappe.PermissionError)
+	return user
+
+
 def is_reviewer(user: str | None = None) -> bool:
 	return bool(REVIEWER_ROLES & set(frappe.get_roles(user)))
 

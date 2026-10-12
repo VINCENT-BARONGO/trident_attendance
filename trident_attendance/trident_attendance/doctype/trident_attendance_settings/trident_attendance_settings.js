@@ -6,9 +6,40 @@ frappe.ui.form.on("Trident Attendance Settings", {
 		frm.add_custom_button(__("Run Processing Now"), () => run_processing(frm, 0), __("Actions"));
 		frm.add_custom_button(__("Run Processing (include today)"), () => run_processing(frm, 1), __("Actions"));
 		frm.add_custom_button(__("Refresh Stats"), () => render_stats(frm), __("Actions"));
+		frm.add_custom_button(__("Send test notification to my devices"), () => send_test_push(frm), __("Actions"));
 		render_stats(frm);
 	},
 });
+
+function send_test_push(frm) {
+	if (frm.is_dirty()) {
+		frappe.msgprint(__("Save the settings first."));
+		return;
+	}
+	frappe.call({
+		method: "trident_attendance.push.send_test_push",
+		freeze: true,
+		freeze_message: __("Sending…"),
+		callback(r) {
+			const m = r.message || {};
+			if (!m.ok) {
+				frappe.msgprint({ title: __("Not sent"), indicator: "orange", message: m.message || __("The test could not be sent.") });
+			} else if (!m.devices) {
+				frappe.msgprint({
+					title: __("No devices"),
+					indicator: "orange",
+					message: __("No phone is registered for {0}. Sign in to the employee app on a phone first.", [frappe.session.user]),
+				});
+			} else {
+				frappe.msgprint({
+					title: __("Test queued"),
+					indicator: "green",
+					message: __("A test notification is on its way to {0} device(s). Failures are recorded on the App Device rows.", [m.devices]),
+				});
+			}
+		},
+	});
+}
 
 function run_processing(frm, include_today) {
 	frappe.call({

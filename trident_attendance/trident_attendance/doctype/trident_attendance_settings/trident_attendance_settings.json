@@ -42,7 +42,11 @@
   "employee_token_client",
   "column_break_employee_access",
   "helper_token_minutes",
-  "allow_face_sign_in"
+  "allow_face_sign_in",
+  "push_section",
+  "push_enabled",
+  "column_break_push",
+  "firebase_service_account"
  ],
  "fields": [
   {
@@ -277,12 +281,35 @@
    "fieldname": "allow_face_sign_in",
    "fieldtype": "Check",
    "label": "Allow Face Sign-in"
+  },
+  {
+   "description": "The employee app's phones get a notification for a new announcement, a leave decision and a new payslip, through Firebase Cloud Messaging. Only a System Manager can change the service account. The button below sends a test to your own phones.",
+   "fieldname": "push_section",
+   "fieldtype": "Section Break",
+   "label": "Push Notifications"
+  },
+  {
+   "default": "0",
+   "description": "Off = nothing is sent; phones still register.",
+   "fieldname": "push_enabled",
+   "fieldtype": "Check",
+   "label": "Push Notifications Enabled"
+  },
+  {
+   "fieldname": "column_break_push",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "The Firebase project's service-account key, the JSON file as downloaded (Project settings > Service accounts > Generate new private key). Kept encrypted. Empty = the site_config key fcm_service_account is used.",
+   "fieldname": "firebase_service_account",
+   "fieldtype": "Password",
+   "label": "Firebase Service Account JSON"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-07 12:00:00.000000",
+ "modified": "2026-10-09 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",
