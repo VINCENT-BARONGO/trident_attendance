@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import frappe
 from frappe import _
+from frappe.model.workflow import get_workflow_name, get_workflow_safe_globals
 from frappe.utils import cint, formatdate, now_datetime
 
 from trident_attendance import push
@@ -112,10 +113,63 @@ def _plain(text) -> str:
 	return text if len(text) <= BODY_LENGTH else text[: BODY_LENGTH - 1].rstrip() + "…"
 
 
+def _approval_path(doctype, name) -> str:
+	"""The web app's page for one document: what it is, and the workflow actions the person
+	looking at it may take (Approve, Reject). A notification about a document that waits for
+	someone opens there, so they act where they land."""
+	return _path("ess", "approvals", doctype, name)
+
+
+def _has_workflow(doctype) -> bool:
+	return bool(doctype and get_workflow_name(doctype))
+
+
+def _may_act(user, doc, workflow) -> bool:
+	"""Whether `user` has a workflow action on `doc` as it stands: a transition out of its
+	state for one of their roles, not barred as self-approval, whose condition holds for them.
+	The ERP's own check (`get_transitions`) answers only for the signed-in user, so the
+	condition is evaluated here with `frappe.session.user` standing for `user`."""
+	state = doc.get(workflow.workflow_state_field)
+	roles = set(frappe.get_roles(user))
+	for transition in workflow.transitions:
+		if transition.state != state or transition.allowed not in roles:
+			continue
+		if not cint(transition.allow_self_approval) and user == doc.get("owner"):
+			continue
+		if not transition.condition:
+			return True
+		context = get_workflow_safe_globals()
+		context["frappe"] = frappe._dict(context["frappe"], session=frappe._dict(user=user))
+		if frappe.safe_eval(transition.condition, context, {"doc": doc.as_dict()}):
+			return True
+	return False
+
+
+def _those_who_may_act(users, doctype, name) -> set:
+	"""Of `users`, who hold a role the workflow step names, those with an action on the
+	document itself: a step open to "Leave Supervisor" on the condition that they are the
+	approver named on the leave is told to that one person, not to every supervisor. Someone
+	whose answer cannot be worked out is still told, as before this check existed."""
+	workflow_name = get_workflow_name(doctype)
+	if not workflow_name or not frappe.db.exists(doctype, name):
+		return set(users)
+	workflow = frappe.get_doc("Workflow", workflow_name)
+	doc = frappe.get_doc(doctype, name)
+	may = set()
+	for user in users:
+		try:
+			if _may_act(user, doc, workflow):
+				may.add(user)
+		except Exception:
+			may.add(user)
+	return may
+
+
 @_never_blocks_the_save
 def notification_log_after_insert(doc, method=None):
 	"""Whatever the ERP puts under a person's bell also goes to their phones: an assignment, a
-	mention, a share, an alert rule. The words are the ERP's own."""
+	mention, a share, an alert rule. The words are the ERP's own. One about a document that
+	goes through a workflow opens that document's approval page."""
 	kind = doc.get("type") or ""
 	if kind not in NOTIFICATION_TITLES:
 		return
@@ -125,24 +179,32 @@ def notification_log_after_insert(doc, method=None):
 	body = _plain(doc.get("subject")) or _plain(f"{doc.get('document_type') or ''} {doc.get('document_name') or ''}")
 	if not body:
 		return
-	push.notify_user(user, _(NOTIFICATION_TITLES[kind]), body, "/ess/", "erp")
+	doctype, name = doc.get("document_type"), doc.get("document_name")
+	url = _approval_path(doctype, name) if name and _has_workflow(doctype) else "/ess/"
+	push.notify_user(user, _(NOTIFICATION_TITLES[kind]), body, url, "erp")
 
 
 @_never_blocks_the_save
 def leave_application_after_insert(doc, method=None):
-	"""A new leave request goes to the leave approver named on it: HRMS only sends an e-mail."""
+	"""A new leave request goes to the leave approver named on it: HRMS only sends an e-mail.
+	Not where leave goes through a workflow: a new request may not be the approver's to act on
+	yet (a draft HR has still to send for approval), and the workflow step tells them when it
+	is."""
 	approver = doc.get("leave_approver")
 	if not approver or doc.get("status") != "Open" or approver == _employee_user(doc.get("employee")):
 		return
+	if _has_workflow(doc.doctype):
+		return
 	who = doc.get("employee_name") or doc.get("employee")
 	body = _plain(f"{who}: {formatdate(doc.from_date)} to {formatdate(doc.to_date)}, {doc.leave_type}")
-	push.notify_user(approver, _("Leave request"), body, "/ess/team", "leave")
+	push.notify_user(approver, _("Leave request"), body, _approval_path(doc.doctype, doc.name), "leave")
 
 
 @_never_blocks_the_save
 def workflow_action_after_insert(doc, method=None):
-	"""A document waiting at a workflow step goes to everyone who may act on it and has the app.
-	Only people with a registered phone are looked at, so a wide role costs one small query."""
+	"""A document waiting at a workflow step goes to everyone who may act on it and has the app,
+	and opens on the page where they act. Only people with a registered phone are looked at,
+	so a wide role costs one small query."""
 	if doc.get("status") != "Open":
 		return
 	roles = [row.get("role") for row in (doc.get("permitted_roles") or []) if row.get("role")]
@@ -157,6 +219,10 @@ def workflow_action_after_insert(doc, method=None):
 	else:
 		return
 	users -= {"Administrator", "Guest", frappe.session.user}
-	body = _plain(f"{doc.get('reference_doctype')} {doc.get('reference_name')}: {doc.get('workflow_state') or ''}")
+	doctype, name = doc.get("reference_doctype"), doc.get("reference_name")
+	if not users or not doctype or not name:
+		return
+	users = _those_who_may_act(users, doctype, name)
+	body = _plain(f"{doctype} {name}: {doc.get('workflow_state') or ''}")
 	for user in sorted(users):
-		push.notify_user(user, _("Waiting for your approval"), body, "/ess/", "erp")
+		push.notify_user(user, _("Waiting for your approval"), body, _approval_path(doctype, name), "erp")

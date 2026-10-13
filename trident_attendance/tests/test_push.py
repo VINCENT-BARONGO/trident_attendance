@@ -792,6 +792,15 @@ class TestWaitingForSomeone(TriggerCase):
 		self.assertEqual((job.title, job.body, job.url, job.kind), ("Assigned to you", "Admin assigned a task & a form to you", "/ess/", "erp"))
 		self.assertEqual(job.devices, [r.name for r in devices(user=self.user_a)])
 
+	def test_a_bell_notification_about_a_workflow_document_opens_its_approval_page(self):
+		with patch("trident_attendance.push_hooks.get_workflow_name", side_effect=lambda doctype: "Tok Flow" if doctype == "Material Request" else None):
+			in_flow = self.bell(document_type="Material Request", document_name="MAT-MR-2026/0001")
+			plain = self.bell(document_type="ToDo", document_name="abc123")
+			nameless = self.bell(document_type="Material Request", document_name=None)
+		self.assertEqual([j.url for j in in_flow], ["/ess/approvals/Material%20Request/MAT-MR-2026%2F0001"])
+		self.assertEqual([j.url for j in plain], ["/ess/"])
+		self.assertEqual([j.url for j in nameless], ["/ess/"])
+
 	def test_each_kind_has_its_title(self):
 		for kind, title in (("Mention", "You were mentioned"), ("Share", "Shared with you"), ("Alert", "ERP notification"), ("", "ERP notification")):
 			doc = frappe._dict(doctype="Notification Log", type=kind, for_user=self.user_b, from_user="Administrator", subject="Something")
@@ -820,21 +829,30 @@ class TestWaitingForSomeone(TriggerCase):
 		self.assertEqual([(j.title, j.body, j.kind) for j in jobs], [("ERP notification", "Tok Test alert", "erp")])
 
 	def test_a_new_leave_request_goes_to_the_approver(self):
-		doc = frappe._dict(doctype="Leave Application", status="Open", leave_approver=self.user_b, employee=self.employee_a, employee_name="Tokone Test", from_date=nowdate(), to_date=nowdate(), leave_type="Annual Leave")
-		push_hooks.leave_application_after_insert(doc, "after_insert")
+		doc = frappe._dict(doctype="Leave Application", name="HR-LAP-2026-00007", status="Open", leave_approver=self.user_b, employee=self.employee_a, employee_name="Tokone Test", from_date=nowdate(), to_date=nowdate(), leave_type="Annual Leave")
+		with patch("trident_attendance.push_hooks.get_workflow_name", return_value=None):
+			push_hooks.leave_application_after_insert(doc, "after_insert")
 		jobs = self.jobs()
 		self.assertEqual(len(jobs), 1)
 		job = jobs[0]
-		self.assertEqual((job.title, job.url, job.kind), ("Leave request", "/ess/team", "leave"))
+		self.assertEqual((job.title, job.url, job.kind), ("Leave request", "/ess/approvals/Leave%20Application/HR-LAP-2026-00007", "leave"))
 		self.assertTrue(job.body.startswith("Tokone Test: "))
 		self.assertIn("Annual Leave", job.body)
 		self.assertEqual(job.devices, [r.name for r in devices(user=self.user_b)])
 
 	def test_no_leave_request_push_without_an_approver_or_to_oneself(self):
-		base = dict(doctype="Leave Application", status="Open", employee=self.employee_a, employee_name="Tokone Test", from_date=nowdate(), to_date=nowdate(), leave_type="Annual Leave")
-		push_hooks.leave_application_after_insert(frappe._dict(leave_approver=None, **base), "after_insert")
-		push_hooks.leave_application_after_insert(frappe._dict(leave_approver=self.user_a, **base), "after_insert")
-		push_hooks.leave_application_after_insert(frappe._dict(leave_approver=self.user_b, **{**base, "status": "Approved"}), "after_insert")
+		base = dict(doctype="Leave Application", name="HR-LAP-2026-00008", status="Open", employee=self.employee_a, employee_name="Tokone Test", from_date=nowdate(), to_date=nowdate(), leave_type="Annual Leave")
+		with patch("trident_attendance.push_hooks.get_workflow_name", return_value=None):
+			push_hooks.leave_application_after_insert(frappe._dict(leave_approver=None, **base), "after_insert")
+			push_hooks.leave_application_after_insert(frappe._dict(leave_approver=self.user_a, **base), "after_insert")
+			push_hooks.leave_application_after_insert(frappe._dict(leave_approver=self.user_b, **{**base, "status": "Approved"}), "after_insert")
+		self.assertEqual(self.jobs(), [])
+
+	def test_where_leave_has_a_workflow_the_new_request_waits_for_its_step(self):
+		# A draft HR has still to send for approval is not the approver's to act on yet.
+		doc = frappe._dict(doctype="Leave Application", name="HR-LAP-2026-00009", status="Open", leave_approver=self.user_b, employee=self.employee_a, employee_name="Tokone Test", from_date=nowdate(), to_date=nowdate(), leave_type="Annual Leave")
+		with patch("trident_attendance.push_hooks.get_workflow_name", return_value="Leave Application"):
+			push_hooks.leave_application_after_insert(doc, "after_insert")
 		self.assertEqual(self.jobs(), [])
 
 	def test_a_workflow_step_goes_to_those_who_may_act_and_have_the_app(self):
@@ -844,6 +862,77 @@ class TestWaitingForSomeone(TriggerCase):
 		jobs = self.jobs()
 		self.assertEqual(sorted(d for j in jobs for d in j.devices), sorted(r.name for r in devices()))
 		self.assertEqual({(j.title, j.body, j.kind) for j in jobs}, {("Waiting for your approval", "Purchase Order PO-0001: Pending Approval", "erp")})
+		self.assertEqual({j.url for j in jobs}, {"/ess/approvals/Purchase%20Order/PO-0001"})
+
+	def test_a_workflow_step_is_told_only_to_those_with_an_action_on_the_document(self):
+		doc = frappe._dict(doctype="Workflow Action", status="Open", user=None, permitted_roles=[frappe._dict(role="Employee Self Service")], reference_doctype="Leave Application", reference_name="HR-LAP-2026-00007", workflow_state="Pending Approval")
+		with patch("trident_attendance.push_hooks._those_who_may_act", side_effect=lambda users, doctype, name: users & {self.user_b}) as narrowed:
+			push_hooks.workflow_action_after_insert(doc, "after_insert")
+		self.assertEqual(narrowed.call_args.args[1:], ("Leave Application", "HR-LAP-2026-00007"))
+		jobs = self.jobs()
+		self.assertEqual([d for j in jobs for d in j.devices], [r.name for r in devices(user=self.user_b)])
+		self.assertEqual({j.url for j in jobs}, {"/ess/approvals/Leave%20Application/HR-LAP-2026-00007"})
+
+	def flow(self, *transitions):
+		return frappe._dict(workflow_state_field="workflow_state", transitions=[frappe._dict(t) for t in transitions])
+
+	def waiting(self, state="Pending Approval", **fields):
+		"""A document at a workflow step. An Employee stands in for one: it has the field the
+		conditions here read, and `as_dict` like any document."""
+		doc = frappe.get_doc("Employee", self.employee_a)
+		doc.update({"leave_approver": self.user_b, **fields})
+		doc.workflow_state = state
+		doc.owner = self.user_a
+		return doc
+
+	def test_who_may_act_is_the_role_the_state_and_the_condition(self):
+		role = "Employee Self Service"
+		named = dict(state="Pending Approval", action="Approve", allowed=role, allow_self_approval=1, condition="doc.leave_approver == frappe.session.user")
+		flow = self.flow(named)
+		doc = self.waiting()
+		self.assertTrue(push_hooks._may_act(self.user_b, doc, flow))
+		# The same role, but not the approver the document names.
+		self.assertFalse(push_hooks._may_act(self.user_a, doc, flow))
+		# The condition is read for the person asked about, whoever is signed in.
+		frappe.set_user(self.user_a)
+		try:
+			self.assertTrue(push_hooks._may_act(self.user_b, doc, flow))
+		finally:
+			frappe.set_user("Administrator")
+		# Another state, and a role they do not hold.
+		self.assertFalse(push_hooks._may_act(self.user_b, self.waiting(state="Draft"), flow))
+		self.assertFalse(push_hooks._may_act(self.user_b, doc, self.flow({**named, "allowed": "Tok Test Role Nobody Holds"})))
+
+	def test_who_may_act_leaves_out_approving_ones_own(self):
+		role = "Employee Self Service"
+		step = dict(state="Pending Approval", action="Approve", allowed=role, allow_self_approval=0, condition=None)
+		doc = self.waiting()
+		self.assertFalse(push_hooks._may_act(self.user_a, doc, self.flow(step)))
+		self.assertTrue(push_hooks._may_act(self.user_b, doc, self.flow(step)))
+		self.assertTrue(push_hooks._may_act(self.user_a, doc, self.flow({**step, "allow_self_approval": 1})))
+
+	def test_a_document_or_person_that_cannot_be_checked_is_still_told(self):
+		users = {self.user_a, self.user_b}
+		with patch("trident_attendance.push_hooks.get_workflow_name", return_value=None):
+			self.assertEqual(push_hooks._those_who_may_act(users, "Purchase Order", "PO-0001"), users)
+		with patch("trident_attendance.push_hooks.get_workflow_name", return_value="Tok Flow"):
+			self.assertEqual(push_hooks._those_who_may_act(users, "Employee", "TOK-NOT-THERE"), users)
+		broken = self.flow(dict(state="Pending Approval", action="Approve", allowed="Employee Self Service", allow_self_approval=1, condition="doc.no_such_thing.at_all == 1"))
+		doc = self.waiting()
+		with (
+			patch("trident_attendance.push_hooks.get_workflow_name", return_value="Tok Flow"),
+			patch("trident_attendance.push_hooks.frappe.get_doc", side_effect=lambda doctype, *a, **k: broken if doctype == "Workflow" else doc),
+		):
+			self.assertEqual(push_hooks._those_who_may_act(users, "Employee", self.employee_a), users)
+
+	def test_those_who_may_act_narrows_to_the_named_approver(self):
+		flow = self.flow(dict(state="Pending Approval", action="Approve", allowed="Employee Self Service", allow_self_approval=1, condition="doc.leave_approver == frappe.session.user"))
+		doc = self.waiting()
+		with (
+			patch("trident_attendance.push_hooks.get_workflow_name", return_value="Tok Flow"),
+			patch("trident_attendance.push_hooks.frappe.get_doc", side_effect=lambda doctype, *a, **k: flow if doctype == "Workflow" else doc),
+		):
+			self.assertEqual(push_hooks._those_who_may_act({self.user_a, self.user_b}, "Employee", self.employee_a), {self.user_b})
 
 	def test_a_closed_workflow_step_or_an_unheld_role_sends_nothing(self):
 		doc = frappe._dict(doctype="Workflow Action", status="Completed", user=None, permitted_roles=[frappe._dict(role="Employee Self Service")], reference_doctype="Purchase Order", reference_name="PO-0001", workflow_state="Approved")
