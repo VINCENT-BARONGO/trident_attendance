@@ -46,7 +46,9 @@
   "push_section",
   "push_enabled",
   "column_break_push",
-  "firebase_service_account"
+  "firebase_service_account",
+  "locate_section",
+  "locate_role"
  ],
  "fields": [
   {
@@ -304,12 +306,26 @@
    "fieldname": "firebase_service_account",
    "fieldtype": "Password",
    "label": "Firebase Service Account JSON"
+  },
+  {
+   "description": "A person can be asked where they are only while they are clocked in. Every request is recorded as a Location Request (who asked about whom, and when). The phone shows nothing when it is asked: the phone app tells people up front that the office may ask for their location while they are clocked in. The button is Employee > Actions > Locate now.",
+   "fieldname": "locate_section",
+   "fieldtype": "Section Break",
+   "label": "Locating People"
+  },
+  {
+   "default": "Attendance Admin",
+   "description": "Users with this role may ask where a clocked-in employee is. System Managers always may. Empty = System Managers only. Only a System Manager can change this.",
+   "fieldname": "locate_role",
+   "fieldtype": "Link",
+   "label": "Role that may locate people",
+   "options": "Role"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-09 12:00:00.000000",
+ "modified": "2026-10-13 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",

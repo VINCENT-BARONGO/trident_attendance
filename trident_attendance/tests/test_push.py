@@ -129,6 +129,10 @@ class PushCase(FrappeTestCase):
 		return EnqueueCapture()
 
 
+# What `frappe.enqueue` keeps for itself; the rest is handed to the job.
+QUEUE_ARGUMENTS = ("method", "queue", "enqueue_after_commit")
+
+
 class EnqueueCapture:
 	def __enter__(self):
 		self.jobs = []
@@ -143,10 +147,11 @@ class EnqueueCapture:
 		self.jobs.append(frappe._dict(method=method, **kwargs))
 
 	def run(self):
-		"""Runs the queued jobs, once each."""
+		"""Runs the queued jobs, once each, with the arguments they were queued with."""
 		jobs, self.jobs = self.jobs, []
 		for job in jobs:
-			push._send_to_devices(job.devices, job.title, job.body, job.url, job.kind)
+			arguments = {key: value for key, value in job.items() if key not in QUEUE_ARGUMENTS}
+			frappe.get_attr(job.method)(**arguments)
 
 
 class TestDevices(PushCase):
@@ -247,6 +252,89 @@ class TestSender(PushCase):
 				}
 			},
 		)
+
+	def test_data_message_shape(self):
+		"""An instruction to the app: no notification, high priority, a time to live."""
+		self.assertEqual(
+			push.data_message("device-token", "shift", {"shift": "in", "at": "2026-10-13T07:58:00+03:00", "employee": "E1"}, 600),
+			{
+				"message": {
+					"token": "device-token",
+					"data": {"shift": "in", "at": "2026-10-13T07:58:00+03:00", "employee": "E1", "kind": "shift"},
+					"android": {"priority": "HIGH", "ttl": "600s"},
+				}
+			},
+		)
+		# Firebase takes strings only.
+		self.assertEqual(push.data_message("t", "shift", {"n": 3, "none": None}, 600)["message"]["data"], {"n": "3", "none": "", "kind": "shift"})
+
+	def test_the_kinds(self):
+		self.assertEqual(push.KINDS, ("announcement", "leave", "payslip", "erp", "test", "shift", "locate"))
+		self.assertEqual((push.SHIFT_TTL, push.LOCATE_TTL), (600, 120))
+
+	def test_an_older_kind_is_queued_and_sent_as_before(self):
+		"""The job's arguments and the message Firebase is sent are what they were before the
+		data-only kinds: a notification, and no time to live."""
+		self.register(self.user_a, TOKEN_A)
+		with self.enqueued() as queue:
+			push.notify_user(self.user_a, "T", "B", "/ess/leave", "leave")
+			self.assertEqual(
+				sorted(queue.jobs[0]), sorted(["method", "queue", "enqueue_after_commit", "devices", "kind", "title", "body", "url"])
+			)
+			queue.run()
+		self.assertEqual([p.payload for p in self.posted], [push.message(TOKEN_A, "T", "B", "/ess/leave", "leave")])
+		self.assertNotIn("ttl", self.posted[0].payload["message"]["android"])
+
+	def test_instruct_user_sends_data_alone(self):
+		self.register(self.user_a, TOKEN_A)
+		self.register(self.user_a, TOKEN_B)
+		self.register(self.user_b, TOKEN_C)
+		data = {"shift": "in", "at": "2026-10-13T07:58:00+03:00", "employee": self.employee_a}
+		with self.enqueued() as queue:
+			self.assertEqual(push.instruct_user(self.user_a, "shift", data, 600), 2)
+			self.assertEqual(len(queue.jobs), 1)
+			job = queue.jobs[0]
+			self.assertEqual(
+				(job.method, job.queue, job.enqueue_after_commit, job.kind, job.data, job.ttl),
+				("trident_attendance.push._send_data_to_devices", "short", True, "shift", data, 600),
+			)
+			self.assertEqual(sorted(job.devices), sorted(r.name for r in devices(user=self.user_a)))
+			queue.run()
+		self.assertEqual(sorted(p.payload["message"]["token"] for p in self.posted), sorted([TOKEN_A, TOKEN_B]))
+		for p in self.posted:
+			self.assertEqual(p.url, SEND_URL)
+			self.assertEqual(p.payload, push.data_message(p.payload["message"]["token"], "shift", data, 600))
+			self.assertNotIn("notification", p.payload["message"])
+			self.assertNotIn("notification", p.payload["message"]["android"])
+		self.assertIn("Push shift: 2 device(s), 2 sent, 0 failed, 0 disabled", self.logged)
+
+	def test_instruct_user_without_anyone_to_tell(self):
+		self.register(self.user_a, TOKEN_A)
+		with self.enqueued() as queue:
+			for user in (None, "Guest", self.user_b, f"nobody@{helpers.TEST_DOMAIN}"):
+				self.assertEqual(push.instruct_user(user, "shift", {"shift": "in"}, 600), 0)
+			helpers.set_settings(push_enabled=0)
+			self.assertEqual(push.instruct_user(self.user_a, "shift", {"shift": "in"}, 600), 0)
+			self.assertEqual(queue.jobs, [])
+		self.assertRaises(ValueError, push.instruct_user, self.user_a, "clock", {"shift": "in"}, 600)
+
+	def test_an_instruction_that_firebase_refuses_is_noted_like_any_other(self):
+		self.register(self.user_a, TOKEN_A)
+		self.responses = [fcm_error(404, "NOT_FOUND", "UNREGISTERED")]
+		with self.enqueued() as queue:
+			push.instruct_user(self.user_a, "shift", {"shift": "out"}, 600)
+			queue.run()
+		self.assertEqual(devices(token=TOKEN_A)[0].enabled, 0)
+		self.assertEqual(push.enabled_devices(self.user_a), 0)
+
+	def test_enabled_devices(self):
+		self.register(self.user_a, TOKEN_A)
+		self.register(self.user_a, TOKEN_B)
+		frappe.db.set_value(DEVICE_DOCTYPE, {"token": TOKEN_B}, "enabled", 0)
+		self.assertEqual(push.enabled_devices(self.user_a), 1)
+		self.assertEqual(push.enabled_devices(self.user_b), 0)
+		self.assertEqual(push.enabled_devices(None), 0)
+		self.assertEqual(push.enabled_devices("Guest"), 0)
 
 	def test_the_http_call(self):
 		"""The request itself: Firebase's v1 URL, the bearer, JSON, a 10 s timeout."""

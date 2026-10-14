@@ -324,8 +324,25 @@ message is
              "android": {"priority": "HIGH", "notification": {"channel_id": "trident_employee"}}}}
 ```
 
-`data.url` is a path on the web app; `kind` is `announcement`, `leave`, `payslip` or
-`test`. The OAuth2 bearer (scope `https://www.googleapis.com/auth/firebase.messaging`) is
+`data.url` is a path on the web app; `kind` is `announcement`, `leave`, `payslip`, `erp`,
+`test`, `shift` or `locate`. The last two are instructions to the app, not notifications:
+the message has no `notification` block, so the phone shows nothing (see "Clocked in or
+out, and locating a person" below):
+
+| `kind` | Sent when | `data` | `android` |
+|---|---|---|---|
+| `shift` | the hub reports a punch (`shift.punched`) | `{"kind": "shift", "shift": "in" \| "out", "at": "<the punch's time, ISO 8601>", "employee": "<Employee ID>"}` | `{"priority": "HIGH", "ttl": "600s"}` |
+| `locate` | someone asks where the person is (`locate.request_location`) | `{"kind": "locate", "request": "<Location Request name>", "employee": "<Employee ID>", "url": "/ess/"}` | `{"priority": "HIGH", "ttl": "120s"}` |
+
+```json
+{"message": {"token": "<device token>",
+             "data": {"kind": "locate", "request": "LOC-2026-10-00001", "employee": "HR-EMP-00042", "url": "/ess/"},
+             "android": {"priority": "HIGH", "ttl": "120s"}}}
+```
+
+`ttl` is how long Firebase keeps the message for a phone it cannot reach: a `shift` or a
+`locate` that would arrive late is dropped instead. `at` carries the site's offset from UTC
+(`2026-10-13T07:58:00+03:00`). The OAuth2 bearer (scope `https://www.googleapis.com/auth/firebase.messaging`) is
 made from the service account with `google-auth`, which Frappe itself depends on, and
 cached until five minutes before it expires. The logs hold kinds and counts only: no device
 token, no message body, and never the key, which is also kept out of the Error Log when
@@ -345,6 +362,95 @@ something fails.
 Whoever holds the service-account key can send any registered phone any notification in
 the company's name: treat it like a password, and generate a new key in Firebase (and
 delete the old one there) if it leaks.
+
+### Clocked in or out, and locating a person
+
+The employee app reports a person's position to Traccar while they are on shift, and
+someone allowed to may ask where a clocked-in person is. Both depend on the ERP knowing
+that a person clocked in or out at the moment it happens. Employee Checkins do not say so:
+every punch goes to the attendance hub first and the hub writes check-ins to the ERP at
+night. The hub therefore tells the ERP about each punch as it accepts it.
+
+**The hub's call.** `POST /api/method/trident_attendance.shift.punched`, with
+`Authorization: token <api_key>:<api_secret>` of the hub's ERP user: the `Hub Service User`
+of Trident Attendance Settings, holding `Attendance Admin` or System Manager. It is the
+check of the hub-only sign-in methods (`employee_access._require_hub`), and anyone else
+gets the same 403 `HubOnlyError`; a System Manager may call it too. The JSON body:
+
+```json
+{"employee": "HR-EMP-00042", "log_type": "IN", "at": "2026-10-13T08:01:12+03:00", "source": "terminal"}
+```
+
+| Field | Meaning |
+|---|---|
+| `employee` | The Employee ID. |
+| `log_type` | `IN` or `OUT` (read in any case). |
+| `at` | The time of the punch itself, ISO 8601 with an offset (`Z` and `YYYY-MM-DD HH:MM:SS` are read too; a time without an offset is taken as the site's time). |
+| `source` | Optional label of where the punch was made (`terminal`, `phone`), 40 characters at most. |
+
+The hub should call it right after it accepts a punch and not wait on it: a failure must
+never affect the punch, and the call is tried again once at most. Calling twice with the
+same punch is harmless.
+
+**The answer is HTTP 200 whatever is wrong with the person or the punch.** The hub reads a
+404 or a 417 as "this ERP does not have the method" and stops calling for that company for
+an hour, and Frappe answers 417 for every validation error, so nothing about one punch is
+raised. The only error statuses are 403 (the caller is not the hub) and 500 (something
+unexpected, in the Error Log as its type; the body is still `{"ok": false, "reason":
+"server_error", "pushed": 0}`).
+
+| Answer | Meaning |
+|---|---|
+| `{"ok": true, "pushed": n}` | The punch was kept and `n` phones were told. |
+| `{"ok": true, "pushed": 0, "reason": "stale"}` | An IN made more than 15 minutes ago: kept, not sent to the phone. |
+| `{"ok": false, "reason": "bad_log_type", "pushed": 0}` | `log_type` is not IN or OUT. Nothing kept. |
+| `... "unknown_employee"` | No Employee has this ID. Nothing kept. |
+| `... "inactive"` | The Employee is not Active. Nothing kept. |
+| `... "bad_time"` | `at` is no time, or lies more than 10 minutes in the future. Nothing kept. |
+| `... "duplicate"` | The punch kept for this employee already has this time (the same punch again). Nothing changes, nothing is sent. |
+| `... "older"` | A punch from before the one kept, arriving late. Nothing changes, nothing is sent. |
+| `... "no_user"` | Kept; the employee has no ERP user, so nobody was told. |
+| `... "no_device"` | Kept; the employee's user has no registered phone. |
+| `... "push_disabled"` | Kept; push notifications are switched off in the settings. |
+| `... "push_failed"` | Kept; the push could not be queued (Error Log). |
+
+What the ERP does with it:
+
+- The punch becomes the employee's **Shift Signal** (one row per employee: `employee`,
+  `log_type`, `at`, `source`, `received_at`) when its `at` is newer than the one kept. The
+  same punch again, or an older punch arriving late, changes nothing and sends nothing.
+  System Managers and HR Managers can read the rows; nobody edits them.
+- The employee's own phones get the `shift` push (data alone, see the table of kinds above)
+  when the punch was made in the last 15 minutes, or is an OUT however late. An IN that
+  arrives later than 15 minutes is kept but not sent, so that it does not start the phone's
+  reporting after the fact.
+
+**Clocked in now** means: the Shift Signal is an IN whose `at` is within the last 18 hours.
+Employee Checkin is not looked at.
+
+**Locating a person.** `POST trident_attendance.locate.request_location(employee)`, from
+Employee > Actions > **Locate now** in the desk. The rules:
+
+- Only while the person is clocked in (above).
+- Only by the role named in Trident Attendance Settings > Locating People > **Role that may
+  locate people** (`locate_role`; Attendance Admin to begin with), or by a System Manager.
+  Empty = System Managers only. Only a System Manager can change the setting.
+- Every request is recorded as a **Location Request** (`employee`, `employee_name`,
+  `requested_by`, `requested_at`, `device_count`): who asked about whom, and when. System
+  Managers and HR Managers can read the rows; nobody, whatever their role, can
+  create, change or delete one by hand.
+- The person is told up front, in the phone app, that the office may ask for their location
+  while they are clocked in. A single request shows them nothing: the `locate` push carries
+  data alone. The Location Request is the only trace of it.
+- One request per employee a minute, whoever asks.
+
+The answer is `{"request": "<Location Request name>", "employee", "employee_name",
+"devices": <phones asked>}`. The position goes from the phone to Traccar; the ERP never
+holds it. A caller without the role gets a permission error (403). Otherwise a validation
+error says which of these is the case: the employee is not active, has no ERP user, has no
+phone registered, is not clocked in, was asked about a moment ago, or push notifications are
+switched off. `trident_attendance.locate.may_locate()` (GET) answers `true` or `false` for
+the signed-in user; the Employee form shows the button by it.
 
 ### Site requirements
 

@@ -5,3 +5,4 @@ trident_attendance.patches.null_empty_client_uid
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
+trident_attendance.patches.default_locate_role

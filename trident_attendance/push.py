@@ -6,6 +6,11 @@ sign-out. The HR hooks in `push_hooks` and the settings page's test button call 
 per enabled device, carrying an OAuth2 bearer made from the Firebase service-account key in
 Trident Attendance Settings (or site_config `fcm_service_account`).
 
+Two kinds are not for reading but for the app to act on: "shift" (the person clocked in or
+out) and "locate" (send one position now). `instruct_user` sends them as data alone, so the
+phone shows nothing, at high priority and with a time to live, so that they are dropped
+instead of arriving late. Every other message is a notification, as it was.
+
 Nothing here writes a device token, a message body or the key to a log: kinds and counts only.
 An unexpected error is logged as its type and where it happened, never with the request's
 values, which in these functions include the key.
@@ -30,8 +35,13 @@ PLATFORMS = ("android", "ios")
 TOKEN_MIN_LENGTH = 20
 TOKEN_MAX_LENGTH = 512
 
-KINDS = ("announcement", "leave", "payslip", "erp", "test")
+KINDS = ("announcement", "leave", "payslip", "erp", "test", "shift", "locate")
 ANDROID_CHANNEL = "trident_employee"
+# Seconds Firebase keeps a message for a phone it cannot reach, for the kinds that are wrong
+# when late. A "shift" that arrives hours later would start or stop the phone's reporting at
+# the wrong time; a "locate" that arrives late gives a position nobody is waiting for.
+SHIFT_TTL = 600
+LOCATE_TTL = 120
 
 FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging"
 FCM_SEND_URL = "https://fcm.googleapis.com/v1/projects/{project}/messages:send"
@@ -217,6 +227,11 @@ def forget_access_token(account: dict):
 # ---------------------------------------------------------------------------
 
 
+def _strings(data: dict | None) -> dict:
+	"""Firebase takes strings only in `data`."""
+	return {str(key): "" if value is None else str(value) for key, value in (data or {}).items()}
+
+
 def message(device_token: str, title: str, body: str, url: str, kind: str) -> dict:
 	"""The FCM v1 request body. `data.url` is a path on the web app, which the phone opens when
 	the notification is tapped."""
@@ -226,6 +241,19 @@ def message(device_token: str, title: str, body: str, url: str, kind: str) -> di
 			"notification": {"title": title, "body": body},
 			"data": {"url": url, "kind": kind},
 			"android": {"priority": "HIGH", "notification": {"channel_id": ANDROID_CHANNEL}},
+		}
+	}
+
+
+def data_message(device_token: str, kind: str, data: dict, ttl: int) -> dict:
+	"""The FCM v1 request body of an instruction to the app: data alone, so the phone shows
+	nothing, at high priority so a sleeping phone is woken for it, and dropped by Firebase
+	when it could not be delivered within `ttl` seconds."""
+	return {
+		"message": {
+			"token": device_token,
+			"data": {**_strings(data), "kind": kind},
+			"android": {"priority": "HIGH", "ttl": f"{cint(ttl)}s"},
 		}
 	}
 
@@ -252,10 +280,10 @@ def _error_code(response) -> str:
 	return str(error.get("status") or f"HTTP {response.status_code}")
 
 
-def _send_one(send_url: str, bearer: str, device_token: str, title: str, body: str, url: str, kind: str) -> str | None:
+def _send_one(send_url: str, bearer: str, payload: dict) -> str | None:
 	"""Firebase's error code for this device, or None when the message was accepted."""
 	try:
-		response = _post(send_url, bearer, message(device_token, title, body, url, kind))
+		response = _post(send_url, bearer, payload)
 	except requests.RequestException as e:
 		# The exception's text can hold the URL; its type is enough.
 		return type(e).__name__
@@ -264,8 +292,9 @@ def _send_one(send_url: str, bearer: str, device_token: str, title: str, body: s
 	return _error_code(response)
 
 
-def _send(devices: list, title: str, body: str, url: str, kind: str) -> tuple[int, int, int]:
-	"""(sent, failed, disabled) over the named devices that are still enabled."""
+def _send(devices: list, kind: str, build) -> tuple[int, int, int]:
+	"""(sent, failed, disabled) over the named devices that are still enabled. `build` makes
+	the request body for one device token."""
 	account = service_account()
 	if not account:
 		_log().warning(f"Push {kind} not sent: no Firebase service account")
@@ -277,7 +306,7 @@ def _send(devices: list, title: str, body: str, url: str, kind: str) -> tuple[in
 	send_url = FCM_SEND_URL.format(project=quote(str(account["project_id"]), safe=""))
 	sent = failed = disabled = 0
 	for row in rows:
-		code = _send_one(send_url, bearer, row.token, title, body, url, kind)
+		code = _send_one(send_url, bearer, build(row.token))
 		if code is None:
 			sent += 1
 			continue
@@ -292,10 +321,10 @@ def _send(devices: list, title: str, body: str, url: str, kind: str) -> tuple[in
 	return sent, failed, disabled
 
 
-def _send_to_devices(devices: list, title: str, body: str, url: str, kind: str):
-	"""The background job. Never raises: the key may be among the locals of a failure."""
+def _job(devices: list, kind: str, build):
+	"""What a background job does. Never raises: the key may be among the locals of a failure."""
 	try:
-		sent, failed, disabled = _send(devices, title, body, url, kind)
+		sent, failed, disabled = _send(devices, kind, build)
 	except Exception as e:
 		trace = "".join(traceback.format_tb(e.__traceback__))
 		frappe.log_error(title=f"trident_attendance: push {kind} failed", message=f"{type(e).__name__}\n{trace}")
@@ -303,7 +332,18 @@ def _send_to_devices(devices: list, title: str, body: str, url: str, kind: str):
 	_log().info(f"Push {kind}: {len(devices)} device(s), {sent} sent, {failed} failed, {disabled} disabled")
 
 
-def _notify(filters: dict, title: str, body: str, url: str, kind: str) -> int:
+def _send_to_devices(devices: list, title: str, body: str, url: str, kind: str):
+	"""The background job for a notification."""
+	_job(devices, kind, lambda token: message(token, title, body, url, kind))
+
+
+def _send_data_to_devices(devices: list, kind: str, data: dict, ttl: int):
+	"""The background job for an instruction to the app (`data_message`)."""
+	_job(devices, kind, lambda token: data_message(token, kind, data, ttl))
+
+
+def _queue(filters: dict, kind: str, job: str, **job_arguments) -> int:
+	"""One background job per batch of the enabled devices `filters` picks. How many devices."""
 	if kind not in KINDS:
 		raise ValueError(f"unknown push kind {kind!r}")
 	if not push_enabled():
@@ -311,18 +351,20 @@ def _notify(filters: dict, title: str, body: str, url: str, kind: str) -> int:
 	devices = frappe.get_all(DEVICE_DOCTYPE, filters={**filters, "enabled": 1}, pluck="name")
 	for start in range(0, len(devices), BATCH_SIZE):
 		frappe.enqueue(
-			"trident_attendance.push._send_to_devices",
+			job,
 			queue="short",
 			enqueue_after_commit=True,
 			devices=devices[start : start + BATCH_SIZE],
-			title=title,
-			body=body,
-			url=url,
 			kind=kind,
+			**job_arguments,
 		)
 	if devices:
 		_log().info(f"Push {kind} queued: {len(devices)} device(s)")
 	return len(devices)
+
+
+def _notify(filters: dict, title: str, body: str, url: str, kind: str) -> int:
+	return _queue(filters, kind, "trident_attendance.push._send_to_devices", title=title, body=body, url=url)
 
 
 def notify_user(user: str | None, title: str, body: str, url: str, kind: str) -> int:
@@ -331,6 +373,22 @@ def notify_user(user: str | None, title: str, body: str, url: str, kind: str) ->
 	if not user or user == "Guest":
 		return 0
 	return _notify({"user": user}, title, body, url, kind)
+
+
+def instruct_user(user: str | None, kind: str, data: dict, ttl: int) -> int:
+	"""Queues an instruction to the app on every enabled device of `user`: data alone, nothing
+	shown on the phone, high priority, given up on after `ttl` seconds. How many devices, 0
+	when push is off or the user has none."""
+	if not user or user == "Guest":
+		return 0
+	return _queue({"user": user}, kind, "trident_attendance.push._send_data_to_devices", data=data, ttl=ttl)
+
+
+def enabled_devices(user: str | None) -> int:
+	"""How many phones are registered for `user` and still known to Firebase."""
+	if not user or user == "Guest":
+		return 0
+	return frappe.db.count(DEVICE_DOCTYPE, {"user": user, "enabled": 1})
 
 
 def notify_all(title: str, body: str, url: str, kind: str) -> int:

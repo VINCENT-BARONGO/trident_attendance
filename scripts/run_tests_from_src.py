@@ -3,10 +3,10 @@
     cd <bench>/sites && ../env/bin/python <this checkout>/scripts/run_tests_from_src.py [--keep] [site] [test ...]
 
 The checkout goes first on sys.path, so `trident_attendance` is this code, not the bench's. The
-site may lack what the tests need (the settings doctype as it is here, the Employee App Sign In
-and App Device doctypes, this checkout's custom fields); they are put in place first and taken
-away again afterwards unless --keep is given. A `test` is a dotted name under `trident_attendance.tests.` (a module, a
-class or one test); without any, every module in TESTS runs. On a site
+site may lack what the tests need (the settings doctype as it is here, the Employee App Sign In,
+App Device, Shift Signal and Location Request doctypes, this checkout's custom fields); they are
+put in place first and taken away again afterwards unless --keep is given. A `test` is a dotted
+name under `trident_attendance.tests.` (a module, a class or one test); without any, every module in TESTS runs. On a site
 where this branch is installed, `bench --site <site> run-tests --app trident_attendance` does.
 """
 
@@ -28,6 +28,8 @@ SETTINGS_JSON = "trident_attendance/trident_attendance/doctype/trident_attendanc
 DOCTYPES = {
 	"Employee App Sign In": "trident_attendance/trident_attendance/doctype/employee_app_sign_in/employee_app_sign_in.json",
 	"App Device": "trident_attendance/trident_attendance/doctype/app_device/app_device.json",
+	"Shift Signal": "trident_attendance/trident_attendance/doctype/shift_signal/shift_signal.json",
+	"Location Request": "trident_attendance/trident_attendance/doctype/location_request/location_request.json",
 }
 # Custom fields the tests need, from the fixture; dropped afterwards when the site lacked them.
 FIELDS = [
@@ -43,11 +45,14 @@ TESTS = [
 	"trident_attendance.tests.test_announcements",
 	"trident_attendance.tests.test_push",
 	"trident_attendance.tests.test_own_records",
+	"trident_attendance.tests.test_shift",
+	"trident_attendance.tests.test_locate",
 ]
 
 
 def pin_rows() -> int:
-	"""App PINs and sign-in state rows on the site. The tests must leave as many as they found."""
+	"""App PINs and rows of this checkout's doctypes on the site. The tests must leave as many
+	as they found."""
 	count = frappe.db.count("__Auth", {"doctype": "Employee", "fieldname": "app_pin"})
 	for doctype in DOCTYPES:
 		if frappe.db.table_exists(doctype):
@@ -141,7 +146,7 @@ def main():
 		left += frappe.get_all("Employee", filters={"last_name": "Tok Test"}, pluck="name")
 		left += frappe.get_all("Newsletter", filters={"subject": ["like", "Tok Test%"]}, pluck="name")
 		if pin_rows() != state["pin_rows"]:
-			left.append(f"{pin_rows() - state['pin_rows']} app PIN, sign-in state or App Device row(s)")
+			left.append(f"{pin_rows() - state['pin_rows']} app PIN row(s) or row(s) of {', '.join(DOCTYPES)}")
 		print(f"Test records left on the site: {left or 'none'}")
 		frappe.destroy()
 	sys.exit(0 if result.wasSuccessful() and not left else 1)

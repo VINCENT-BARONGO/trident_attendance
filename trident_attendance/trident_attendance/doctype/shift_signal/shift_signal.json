@@ -1,0 +1,97 @@
+{
+ "actions": [],
+ "autoname": "field:employee",
+ "creation": "2026-10-13 12:00:00.000000",
+ "description": "Each employee's latest punch as the attendance hub reported it when it was made: IN or OUT, and when. It decides whether a person counts as clocked in right now (Employee Checkins reach the ERP at night). Kept by the app itself; not for editing.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "log_type",
+  "at",
+  "column_break_signal",
+  "source",
+  "received_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Employee",
+   "options": "Employee",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "log_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Log Type",
+   "options": "IN\nOUT",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "description": "The time of the punch itself.",
+   "fieldname": "at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_signal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Where the punch was made, as the hub names it (terminal, phone).",
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source",
+   "length": 40,
+   "read_only": 1
+  },
+  {
+   "description": "When the hub told the ERP.",
+   "fieldname": "received_at",
+   "fieldtype": "Datetime",
+   "label": "Received At",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-13 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Shift Signal",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "HR Manager"
+  }
+ ],
+ "sort_field": "at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "employee",
+ "track_changes": 0
+}

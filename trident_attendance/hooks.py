@@ -75,7 +75,11 @@ override_doctype_class = {
 
 doc_events = {
 	"Employee": {
-		"on_trash": "trident_attendance.employee_pin.on_employee_trash",
+		"on_trash": [
+			"trident_attendance.employee_pin.on_employee_trash",
+			"trident_attendance.shift.on_employee_trash",
+		],
+		"before_rename": "trident_attendance.shift.before_employee_rename",
 		"after_rename": "trident_attendance.employee_pin.after_employee_rename",
 	},
 	"Employee Checkin": {
