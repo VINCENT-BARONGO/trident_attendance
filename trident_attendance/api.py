@@ -17,7 +17,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, cint, date_diff, flt, get_datetime, getdate, now_datetime, nowdate
 
-from trident_attendance import tasks
+from trident_attendance import tasks, work_day
 from trident_attendance.checkin_rules import REJECTED_PREFIX
 from trident_attendance.utils import (
 	DEFAULT_ID_FIELD,
@@ -66,7 +66,7 @@ def _groups(names) -> list[tuple[str, object]]:
 		row = frappe.db.get_value("Employee Checkin", name, ["employee", "time"], as_dict=True)
 		if not row:
 			continue
-		key = (row.employee, getdate(row.time))
+		key = (row.employee, work_day.work_date_of(row.employee, row.time))
 		if key not in groups:
 			groups.append(key)
 	return groups
@@ -139,11 +139,14 @@ def add_missing_out(name, time):
 	)
 	if not ref:
 		frappe.throw(_("Check-in {0} not found.").format(name))
-	day = getdate(ref.time)
+	day = work_day.work_date_of(ref.employee, ref.time)
 	try:
 		out_time = combine_datetime(day, time) if len(str(time)) <= 8 else get_datetime(time)
 	except Exception:
 		frappe.throw(_("Enter the OUT time as HH:MM."))
+	# On a night shift an OUT earlier in the clock than the IN is the next morning's.
+	if len(str(time)) <= 8 and out_time <= get_datetime(ref.time) and work_day.night_on(ref.employee, day):
+		out_time = out_time + timedelta(days=1)
 	if out_time <= get_datetime(ref.time):
 		frappe.throw(_("The OUT time must be after the check-in at {0}.").format(ref.time))
 
@@ -165,7 +168,7 @@ def cancel_and_remark(attendance):
 	att = frappe.get_doc("Attendance", attendance)
 	employee, day = att.employee, getdate(att.attendance_date)
 	linked = frappe.db.exists("Employee Checkin", {"attendance": att.name})
-	start, end = day_bounds(day)
+	start, end = work_day.bounds(employee, day)
 	has_punches = frappe.db.exists(
 		"Employee Checkin", {"employee": employee, "time": ["between", [start, end]], **scope_filters()}
 	)

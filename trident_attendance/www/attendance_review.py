@@ -4,6 +4,7 @@ import frappe
 from frappe import _
 from frappe.utils import add_days, get_datetime, get_time, getdate, nowdate
 
+from trident_attendance import work_day
 from trident_attendance.checkin_rules import (
 	ALREADY_MARKED_PREFIX,
 	DAY_PREFIXES,
@@ -138,8 +139,10 @@ def get_context(context):
 	if view == "queue":
 		rows = _queue_rows(settings)
 	else:
-		start, end = day_bounds(day)
-		rows = _rows({"time": ["between", [start, end]]}, settings)
+		# The next morning too: a night shift's clock-out belongs to this day.
+		start, _end = day_bounds(day)
+		_start, end = day_bounds(add_days(day, 1))
+		rows = [r for r in _rows({"time": ["between", [start, end]]}, settings) if _work_date(r) == getdate(day)]
 
 	for r in rows:
 		r.time_str = get_datetime(r.time).strftime("%H:%M")
@@ -185,15 +188,20 @@ def _queue_rows(settings):
 	}
 	filters.update(scope_filters(settings))
 	pending = frappe.get_all("Employee Checkin", filters=filters, fields=["employee", "time"])
-	keys = {(p.employee, getdate(p.time)) for p in pending}
+	keys = {(p.employee, _work_date(p)) for p in pending}
 	if not keys:
 		return []
 	employees = sorted({k[0] for k in keys})
 	dates = [k[1] for k in keys]
 	d_start, _d_end = day_bounds(min(dates))
-	_d_start, d_end = day_bounds(max(dates))
+	_d_start, d_end = day_bounds(add_days(max(dates), 1))
 	rows = _rows({"employee": ["in", employees], "time": ["between", [d_start, d_end]]}, settings)
-	return [r for r in rows if (r.employee, getdate(r.time)) in keys]
+	return [r for r in rows if (r.employee, _work_date(r)) in keys]
+
+
+def _work_date(row):
+	"""The work day a punch belongs to (work_day.py: a night shift's morning is the night before)."""
+	return work_day.work_date_of(row.employee, row.time)
 
 
 def _supervisors():
@@ -221,7 +229,7 @@ def _supervisors():
 
 def _existing_attendance(rows) -> dict:
 	"""{(employee, date): Attendance} for the employee-days in `rows`, in one query."""
-	keys = {(r.employee, getdate(r.time)) for r in rows}
+	keys = {(r.employee, _work_date(r)) for r in rows}
 	if not keys:
 		return {}
 	dates = [k[1] for k in keys]
@@ -243,7 +251,7 @@ def _group_by_day(
 	"""The employee-days to draw, newest day first, and how many covered days were left out."""
 	groups = {}
 	for r in rows:
-		key = (getdate(r.time), r.employee)
+		key = (_work_date(r), r.employee)
 		g = groups.setdefault(
 			key,
 			{

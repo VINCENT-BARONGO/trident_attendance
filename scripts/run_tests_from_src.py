@@ -37,6 +37,27 @@ FIELDS = [
 	"Newsletter-custom_app_announcement",
 	"Newsletter-custom_app_announced_at",
 	"Leave Application-custom_app_notified_status",
+	# The day processing (tasks.py) reads and writes these: test_own_shift's night shift.
+	"Employee-custom_project",
+	"Employee Checkin-custom_mobile_section",
+	"Employee Checkin-custom_site_project",
+	"Employee Checkin-custom_id_number_scanned",
+	"Employee Checkin-custom_mrz_raw",
+	"Employee Checkin-custom_face_match_result",
+	"Employee Checkin-custom_face_match_score",
+	"Employee Checkin-custom_logged_by",
+	"Employee Checkin-custom_app_source",
+	"Employee Checkin-custom_attendance_photo",
+	"Employee Checkin-custom_review_section",
+	"Employee Checkin-custom_review_status",
+	"Employee Checkin-custom_hold_reasons",
+	"Employee Checkin-custom_reviewed_by",
+	"Employee Checkin-custom_reviewed_on",
+	"Employee Checkin-custom_distance_from_site",
+	"Employee Checkin-custom_client_uid",
+	"Attendance-custom_column_break_kv2sy",
+	"Attendance-custom_project",
+	"Attendance-custom_mixed_projects",
 ]
 TESTS = [
 	"trident_attendance.tests.test_employee_access",
@@ -47,6 +68,7 @@ TESTS = [
 	"trident_attendance.tests.test_own_records",
 	"trident_attendance.tests.test_shift",
 	"trident_attendance.tests.test_locate",
+	"trident_attendance.tests.test_own_shift",
 ]
 
 

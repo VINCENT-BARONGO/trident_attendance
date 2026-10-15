@@ -40,6 +40,7 @@ from trident_attendance.checkin_rules import (
 	evaluate_project,
 	is_internal,
 )
+from trident_attendance import work_day
 from trident_attendance.trident_attendance.doctype.trident_attendance_run.trident_attendance_run import record_run
 from trident_attendance.utils import (
 	INTERNAL_SOURCE_PREFIX,
@@ -110,14 +111,23 @@ def finalise_days(force_today: bool = False, up_to=None, trigger: str = "Schedul
 
 
 def _finalise_days(settings, end_date, summary, commit_each):
+	work_day.clear_cache()
+	# One day further on: a night shift's clock-out the next morning belongs to the day before.
 	filters = {
 		"custom_review_status": STATUS_PENDING,
 		"attendance": ["is", "not set"],
-		"time": ["between", [f"{add_days(end_date, -LOOKBACK_DAYS)} 00:00:00", f"{end_date} 23:59:59"]],
+		"time": ["between", [f"{add_days(end_date, -LOOKBACK_DAYS)} 00:00:00", f"{add_days(end_date, 1)} 23:59:59"]],
 	}
 	filters.update(scope_filters(settings))
 	pending = frappe.get_all("Employee Checkin", filters=filters, fields=["employee", "time"], order_by="employee, time")
-	days = sorted({(p.employee, getdate(p.time)) for p in pending})
+	days = sorted(
+		{
+			(p.employee, d)
+			for p in pending
+			for d in [work_day.work_date_of(p.employee, p.time)]
+			if d <= end_date and work_day.is_complete(p.employee, d)
+		}
+	)
 	summary["days"] = len(days)
 
 	for employee, day in days:
@@ -193,7 +203,7 @@ def purge_attendance_photos():
 
 
 def get_day_logs(employee: str, day, settings=None, include_rejected: bool = False, for_update: bool = False) -> list:
-	start, end = day_bounds(day)
+	start, end = work_day.bounds(employee, day)
 	filters = {"employee": employee, "time": ["between", [start, end]]}
 	if not include_rejected:
 		filters["custom_review_status"] = ["!=", STATUS_REJECTED]
