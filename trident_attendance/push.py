@@ -35,7 +35,7 @@ PLATFORMS = ("android", "ios")
 TOKEN_MIN_LENGTH = 20
 TOKEN_MAX_LENGTH = 512
 
-KINDS = ("announcement", "leave", "payslip", "erp", "test", "shift", "locate")
+KINDS = ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "clock")
 ANDROID_CHANNEL = "trident_employee"
 # Seconds Firebase keeps a message for a phone it cannot reach, for the kinds that are wrong
 # when late. A "shift" that arrives hours later would start or stop the phone's reporting at

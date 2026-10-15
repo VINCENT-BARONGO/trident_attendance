@@ -269,7 +269,7 @@ class TestSender(PushCase):
 		self.assertEqual(push.data_message("t", "shift", {"n": 3, "none": None}, 600)["message"]["data"], {"n": "3", "none": "", "kind": "shift"})
 
 	def test_the_kinds(self):
-		self.assertEqual(push.KINDS, ("announcement", "leave", "payslip", "erp", "test", "shift", "locate"))
+		self.assertEqual(push.KINDS, ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "clock"))
 		self.assertEqual((push.SHIFT_TTL, push.LOCATE_TTL), (600, 120))
 
 	def test_an_older_kind_is_queued_and_sent_as_before(self):
@@ -316,7 +316,7 @@ class TestSender(PushCase):
 			helpers.set_settings(push_enabled=0)
 			self.assertEqual(push.instruct_user(self.user_a, "shift", {"shift": "in"}, 600), 0)
 			self.assertEqual(queue.jobs, [])
-		self.assertRaises(ValueError, push.instruct_user, self.user_a, "clock", {"shift": "in"}, 600)
+		self.assertRaises(ValueError, push.instruct_user, self.user_a, "no-such-kind", {"shift": "in"}, 600)
 
 	def test_an_instruction_that_firebase_refuses_is_noted_like_any_other(self):
 		self.register(self.user_a, TOKEN_A)

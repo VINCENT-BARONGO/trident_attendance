@@ -29,6 +29,9 @@ from trident_attendance.utils import require_signed_in
 SIGNAL_DOCTYPE = "Shift Signal"
 LOG_TYPES = {"IN": "in", "OUT": "out"}
 SOURCE_LENGTH = 40
+PLACE_LENGTH = 80
+# Where the "Clocked in" notification opens: My HR's Attendance.
+CLOCK_URL = "/ess/attendance"
 
 # An IN older than this is kept but not sent to the phone: the hub can pass a punch on late,
 # and a late IN must not start the phone's reporting. An OUT is sent however late it is.
@@ -145,9 +148,14 @@ def _never_answers_with_an_error_status_for_one_punch(method):
 
 @frappe.whitelist(methods=["POST"])
 @_never_answers_with_an_error_status_for_one_punch
-def punched(employee=None, log_type=None, at=None, source=None):
+def punched(employee=None, log_type=None, at=None, source=None, place=None):
 	"""From the attendance hub, right after it accepts a punch: `employee` (the Employee ID)
-	clocked `log_type` (IN or OUT) at `at`, on `source` ("terminal", "phone"; a label only).
+	clocked `log_type` (IN or OUT) at `at`, on `source` ("terminal", "phone"; a label only), at
+	`place` (where, as people call it; optional, hub 0.36.0).
+
+	A punch made in the last 15 minutes is also told to the person as a notification they see:
+	"Clocked in" / "Clocked out", "07:52 · Isinya factory", which opens My HR's Attendance. So
+	someone who scanned at a terminal knows it was taken.
 
 	The punch becomes the employee's Shift Signal when it is newer than the one kept. Then the
 	employee's own phones are told with the data-only "shift" push, when the punch was made in
@@ -183,6 +191,7 @@ def punched(employee=None, log_type=None, at=None, source=None):
 	if not when or when > now + PUNCH_MAX_AHEAD:
 		return _refuse("bad_time")
 	source = str(source or "").strip()[:SOURCE_LENGTH] or None
+	place = " ".join(str(place or "").split())[:PLACE_LENGTH]
 
 	not_kept = _record(row.name, log_type, when, source)
 	if not_kept:
@@ -200,6 +209,14 @@ def punched(employee=None, log_type=None, at=None, source=None):
 		# The signal is kept whatever happens to the push; the hub is not asked to try again.
 		frappe.log_error(title="trident_attendance: shift push failed", message=type(e).__name__)
 		return _refuse("push_failed")
+	if when >= now - RECENT_PUNCH:
+		try:
+			title = "Clocked in" if log_type == "IN" else "Clocked out"
+			body = f"{when:%H:%M} · {place}" if place else f"{when:%H:%M}"
+			push.notify_user(row.user_id, title, body, CLOCK_URL, "clock")
+		except Exception as e:
+			# Only the person's notice is lost; the tracking instruction above stands.
+			frappe.log_error(title="trident_attendance: clock notification failed", message=type(e).__name__)
 	return _answer(pushed) if pushed else _refuse("no_device")
 
 

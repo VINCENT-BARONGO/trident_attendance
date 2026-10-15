@@ -40,9 +40,25 @@ class ShiftCase(TriggerCase):
 	"""Push on, a device for each of the two employees, the queue captured, and the hub's own
 	user named in the settings and signed in."""
 
+	def _take(self, keep):
+		"""This app's queued jobs that `keep` picks, taken off the queue; the others stay for the
+		next look. Making a test user also queues Frappe's own create_contact: never counted."""
+		kept = getattr(self, "_kept", []) + [
+			job for job in super().jobs() if not str(job.get("method") or "").startswith("frappe.")
+		]
+		self._kept = [job for job in kept if not keep(job)]
+		return [job for job in kept if keep(job)]
+
 	def jobs(self):
-		"""This app's jobs only: making a test user also queues Frappe's own create_contact."""
-		return [job for job in super().jobs() if not str(job.get("method") or "").startswith("frappe.")]
+		"""The shift instructions, without the "Clocked in" notification (`clock_jobs`)."""
+		return self._take(lambda job: job.kind != "clock")
+
+	def all_jobs(self):
+		return self._take(lambda job: True)
+
+	def clock_jobs(self):
+		"""The notification the person sees: (title, body, url) of each queued one."""
+		return [(job.title, job.body, job.url) for job in self._take(lambda job: job.kind == "clock")]
 
 	def setUp(self):
 		super().setUp()
@@ -361,3 +377,29 @@ class TestShiftSignalRows(ShiftCase):
 		self.assertIn("trident_attendance.shift.on_employee_trash", events["on_trash"])
 		self.assertIn("trident_attendance.employee_pin.on_employee_trash", events["on_trash"])
 		self.assertIn("trident_attendance.shift.before_employee_rename", events["before_rename"])
+
+
+class TestClockNotification(ShiftCase):
+	"""A recent punch is also told to the person as a notification they see."""
+
+	def test_a_clock_in_says_when_and_where(self):
+		when = ago(minutes=1)
+		punched(self.employee_a, "IN", iso(when), source="terminal", place="  Isinya   factory ")
+		self.assertEqual(self.clock_jobs(), [("Clocked in", f"{when:%H:%M} · Isinya factory", "/ess/attendance")])
+		self.assertEqual(len(self.jobs()), 1, "the tracking instruction still goes as well")
+
+	def test_a_clock_out_without_a_place_says_the_time(self):
+		when = ago(minutes=3)
+		punched(self.employee_a, "OUT", iso(when), source="phone")
+		self.assertEqual(self.clock_jobs(), [("Clocked out", f"{when:%H:%M}", "/ess/attendance")])
+
+	def test_an_old_punch_is_not_news(self):
+		punched(self.employee_a, "OUT", iso(ago(hours=2)), source="terminal", place="Gate")
+		self.assertEqual(self.clock_jobs(), [])
+		self.assertEqual(len(self.jobs()), 1, "a late OUT still stops the tracking")
+
+	def test_nothing_with_push_off(self):
+		helpers.set_settings(push_enabled=0)
+		punched(self.employee_a, "IN", iso(ago(minutes=1)), source="terminal", place="Gate")
+		self.assertEqual(self.all_jobs(), [])
+
