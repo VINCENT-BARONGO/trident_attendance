@@ -52,7 +52,11 @@
   "column_break_own_shift",
   "own_shift_types",
   "locate_section",
-  "locate_role"
+  "locate_role",
+  "column_break_locate",
+  "traccar_url",
+  "traccar_username",
+  "traccar_password"
  ],
  "fields": [
   {
@@ -346,12 +350,33 @@
    "fieldtype": "Link",
    "label": "Role that may locate people",
    "options": "Role"
+  },
+  {
+   "fieldname": "column_break_locate",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Traccar's web address, the one its map opens at (e.g. https://tracking.example.com), not the phones' port 5055. Locate now reads the phone's answer from it and says where that is. Blank: the position is in Traccar alone.",
+   "fieldname": "traccar_url",
+   "fieldtype": "Data",
+   "label": "Traccar Address"
+  },
+  {
+   "description": "A Traccar user that can see the employees' devices; read-only is enough. Blank when the password field holds a Traccar API token.",
+   "fieldname": "traccar_username",
+   "fieldtype": "Data",
+   "label": "Traccar User"
+  },
+  {
+   "fieldname": "traccar_password",
+   "fieldtype": "Password",
+   "label": "Traccar Password or Token"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-10-15 12:00:00.000000",
+ "modified": "2026-10-16 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",

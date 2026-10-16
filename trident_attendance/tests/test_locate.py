@@ -1,10 +1,11 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import frappe
 from frappe.utils import get_datetime, now_datetime
 
-from trident_attendance import push, shift
-from trident_attendance.locate import REQUEST_DOCTYPE, may_locate, request_location
+from trident_attendance import locate, push, shift
+from trident_attendance.locate import REQUEST_DOCTYPE, location_answer, may_locate, request_location
 from trident_attendance.tests import helpers
 from trident_attendance.tests.test_push import TOKEN_A, TOKEN_C, TriggerCase, devices
 from trident_attendance.tests.test_shift import ago, iso
@@ -323,3 +324,165 @@ class TestLocationRequestRows(LocateCase):
 		# The person who asks does not get to read the record by asking.
 		frappe.set_user(self.user_a)
 		self.assertFalse(frappe.has_permission(REQUEST_DOCTYPE, "read"))
+
+
+TRACCAR = "https://traccar.tok-test.example"
+# A site and a point well away from it (about 5 km north).
+SITE = (-1.300000, 36.800000)
+AWAY = (-1.255000, 36.800000)
+
+
+class _Answer:
+	def __init__(self, status, body):
+		self.status_code, self._body = status, body
+
+	def json(self):
+		return self._body
+
+
+class FakeWeb:
+	"""Traccar with one device for `employee` and the given positions, and OpenStreetMap's
+	geocoder. `calls` keeps what was asked, to show what was (and was not) asked."""
+
+	def __init__(self, employee, positions=(), traccar_status=200, device=True, address=None):
+		self.employee, self.positions, self.traccar_status = employee, list(positions), traccar_status
+		self.device = device
+		self.address = address if address is not None else {"road": "Mombasa Road", "suburb": "Syokimau", "county": "Machakos"}
+		self.calls = []
+
+	def get(self, url, params=None, **kwargs):
+		self.calls.append((url, dict(params or {}), kwargs))
+		if url.startswith(TRACCAR):
+			if self.traccar_status != 200:
+				return _Answer(self.traccar_status, {})
+			if url.endswith("/api/devices"):
+				return _Answer(200, [{"id": 7, "uniqueId": self.employee}] if self.device else [])
+			return _Answer(200, self.positions)
+		return _Answer(200, {"address": self.address})
+
+	def asked(self, part):
+		return [c for c in self.calls if part in c[0]]
+
+
+def position(lat_lon, seconds_ago=5, accuracy=12.0):
+	at = (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).isoformat()
+	return {"latitude": lat_lon[0], "longitude": lat_lon[1], "fixTime": at, "serverTime": at, "accuracy": accuracy}
+
+
+class TestLocationAnswer(LocateCase):
+	def setUp(self):
+		super().setUp()
+		frappe.set_user("Administrator")
+		helpers.set_settings(traccar_url=TRACCAR + "/", traccar_username="erp-locate", geofence_tolerance_meters=0)
+		frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": "Tok Test Kingswood",
+				"status": "Open",
+				"custom_site_latitude": SITE[0],
+				"custom_site_longitude": SITE[1],
+				"custom_geofence_radius_meters": 200,
+			}
+		).insert(ignore_permissions=True)
+		frappe.set_user(self.locator)
+		self.request = request_location(self.employee_a)["request"]
+		self.jobs()
+
+	def answer(self, web, request=None):
+		with patch.object(locate.requests, "get", web.get), patch.object(locate, "_wait_for_nominatim", lambda: None):
+			return location_answer(request or self.request)
+
+	def test_at_a_site_it_names_the_site(self):
+		web = FakeWeb(self.employee_a, [position(SITE)])
+		answer = self.answer(web)
+		self.assertEqual((answer["status"], answer["site_name"], answer["place"]), ("found", "Tok Test Kingswood", None))
+		self.assertEqual((answer["minutes_ago"], answer["accuracy_m"]), (0, 12))
+		self.assertEqual(web.asked("openstreetmap"), [], "a site needs no place name")
+		# Traccar is asked for this employee's device, with the login in the settings.
+		self.assertEqual(web.asked("/api/devices")[0][1], {"uniqueId": self.employee_a})
+		self.assertEqual(web.asked("/api/devices")[0][2]["auth"][0], "erp-locate")
+
+	def test_at_no_site_it_names_the_place_and_never_the_coordinates(self):
+		web = FakeWeb(self.employee_a, [position(AWAY)])
+		answer = self.answer(web)
+		self.assertEqual(answer["status"], "found")
+		self.assertIsNone(answer["site"])
+		self.assertEqual(answer["place"], "Mombasa Road, Syokimau, Machakos")
+		self.assertEqual(answer["attribution"], "© OpenStreetMap contributors")
+		for value in answer.values():
+			self.assertNotIn("36.8", str(value))
+		self.assertNotIn("latitude", answer)
+		osm = web.asked("openstreetmap")
+		self.assertEqual(len(osm), 1)
+		self.assertIn("trident_attendance", osm[0][2]["headers"]["User-Agent"], "OpenStreetMap asks apps to name themselves")
+
+	def test_the_nearest_of_two_sites_that_hold_the_point(self):
+		frappe.set_user("Administrator")
+		frappe.get_doc(
+			{
+				"doctype": "Project",
+				"project_name": "Tok Test Next Door",
+				"status": "Open",
+				"custom_site_latitude": SITE[0] + 0.0015,
+				"custom_site_longitude": SITE[1],
+				"custom_geofence_radius_meters": 300,
+			}
+		).insert(ignore_permissions=True)
+		frappe.set_user(self.locator)
+		self.assertEqual(self.answer(FakeWeb(self.employee_a, [position(SITE)]))["site_name"], "Tok Test Kingswood")
+
+	def test_a_site_without_a_fence_or_closed_is_not_here(self):
+		frappe.set_user("Administrator")
+		name = frappe.db.get_value("Project", {"project_name": "Tok Test Kingswood"})
+		frappe.db.set_value("Project", name, "custom_geofence_radius_meters", 0)
+		frappe.set_user(self.locator)
+		self.assertIsNone(self.answer(FakeWeb(self.employee_a, [position(SITE)]))["site"])
+		frappe.set_user("Administrator")
+		frappe.db.set_value("Project", name, {"custom_geofence_radius_meters": 200, "status": "Completed"})
+		frappe.set_user(self.locator)
+		self.assertIsNone(self.answer(FakeWeb(self.employee_a, [position(SITE)]))["site"])
+
+	def test_waiting_until_the_phone_answers(self):
+		# Only a position from before the request: the phone has not answered yet.
+		web = FakeWeb(self.employee_a, [position(SITE, seconds_ago=600)])
+		self.assertEqual(self.answer(web), {"status": "waiting"})
+		web.positions.append(position(AWAY, seconds_ago=1))
+		self.assertEqual(self.answer(web)["place"], "Mombasa Road, Syokimau, Machakos")
+
+	def test_the_newest_answer_wins(self):
+		web = FakeWeb(self.employee_a, [position(SITE, seconds_ago=1), position(AWAY, seconds_ago=3)])
+		self.assertEqual(self.answer(web)["site_name"], "Tok Test Kingswood")
+
+	def test_no_place_name_to_be_had(self):
+		answer = self.answer(FakeWeb(self.employee_a, [position(AWAY)], address={}))
+		self.assertEqual((answer["status"], answer["place"], answer["attribution"]), ("found", None, None))
+
+	def test_traccar_not_set_up_no_device_and_refusing(self):
+		self.assertEqual(self.answer(FakeWeb(self.employee_a, device=False)), {"status": "no_device"})
+		answer = self.answer(FakeWeb(self.employee_a, traccar_status=401))
+		self.assertEqual(answer["status"], "traccar_error")
+		self.assertIn("refused the login", answer["message"])
+		frappe.set_user("Administrator")
+		helpers.set_settings(traccar_url="")
+		frappe.set_user(self.locator)
+		web = FakeWeb(self.employee_a, [position(SITE)])
+		self.assertEqual(self.answer(web), {"status": "not_set_up"})
+		self.assertEqual(web.calls, [])
+
+	def test_only_the_one_who_asked_and_only_for_three_minutes(self):
+		web = FakeWeb(self.employee_a, [position(SITE)])
+		frappe.set_user(self.manager)
+		self.assertRaises(frappe.PermissionError, self.answer, web)
+		frappe.set_user(self.hr)
+		self.assertRaises(frappe.PermissionError, self.answer, web)
+		frappe.set_user(self.locator)
+		self.assertRaises(frappe.PermissionError, self.answer, web, "LOC-NOBODY")
+		frappe.db.set_value(REQUEST_DOCTYPE, self.request, "requested_at", now_datetime() - timedelta(minutes=4))
+		self.assertRaisesRegex(frappe.ValidationError, "is over", self.answer, web)
+		self.assertEqual(web.calls, [])
+
+	def test_nothing_of_the_position_is_kept(self):
+		before = frappe.get_all(REQUEST_DOCTYPE, fields=["*"])
+		self.answer(FakeWeb(self.employee_a, [position(AWAY)]))
+		self.assertEqual(frappe.get_all(REQUEST_DOCTYPE, fields=["*"]), before)
+		self.assertEqual(frappe.get_all("Error Log", filters={"creation": [">", now_datetime() - timedelta(minutes=1)]}), [])

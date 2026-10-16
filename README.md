@@ -452,6 +452,28 @@ phone registered, is not clocked in, was asked about a moment ago, or push notif
 switched off. `trident_attendance.locate.may_locate()` (GET) answers `true` or `false` for
 the signed-in user; the Employee form shows the button by it.
 
+**Where they are, in words.** After Locate now the Employee form opens a box and asks
+`GET trident_attendance.locate.location_answer(request)` every 4 seconds, for 90 seconds at
+most. Only the one who made the request may ask, for 3 minutes after it. The ERP reads, from
+Traccar, the newest position the person's device sent since the request (the device's
+Identifier in Traccar is the Employee ID), and answers:
+
+- **At a site:** an open Project whose geofence holds the position (its radius plus the
+  Geofence Tolerance, as punches are held; a radius of 0 is no fence), the nearest of several.
+- **Elsewhere:** the place's name from OpenStreetMap's geocoder (`nominatim.openstreetmap.org`,
+  at most one request a second, with "© OpenStreetMap contributors" shown under it).
+- How long ago the position is, and how accurate the phone said it was. **Never the
+  coordinates.** Nothing of the position is stored, logged or cached.
+
+`{"status": "found", "site", "site_name", "place", "attribution", "at", "minutes_ago",
+"accuracy_m"}`, or `waiting`, `not_set_up` (no Traccar Address), `no_device` or
+`traccar_error` (`message`). Settings > Locating People: **Traccar Address** (Traccar's web
+address, not the phones' port 5055), **Traccar User** and **Traccar Password or Token** (a
+user that can see the employees' devices; read-only is enough; with no user, the password
+field holds a Traccar API token). The ERP server must reach both Traccar and OpenStreetMap.
+Do not switch on Traccar's own geocoder with OpenStreetMap: it would look up every position
+of every phone, which OpenStreetMap's public geocoder does not allow.
+
 ### Site requirements
 
 - `System Settings > Time Zone` must be `Africa/Nairobi` (the app posts handset-local
