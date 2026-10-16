@@ -142,7 +142,8 @@ class TestHubOnly(EmployeeAccessCase):
 	def test_only_a_system_manager_names_the_hub(self):
 		frappe.set_user("Administrator")
 		hr = helpers.make_user(f"hr@{helpers.TEST_DOMAIN}", roles=["HR Manager", "Attendance Admin"]).name
-		for field, value in (("hub_service_user", hr), ("employee_token_client", None), ("allow_face_sign_in", 1)):
+		for field, value in (("hub_service_user", hr), ("employee_token_client", None), ("allow_face_sign_in", 1),
+				("traccar_url", "https://elsewhere.example"), ("traccar_username", "someone")):
 			frappe.set_user(hr)
 			settings = frappe.get_doc(SETTINGS_DOCTYPE)
 			settings.set(field, value)

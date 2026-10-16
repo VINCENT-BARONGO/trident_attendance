@@ -36,7 +36,9 @@ class TridentAttendanceSettings(Document):
 		service account: whoever holds it can send any phone any notification. And the role
 		that may locate people: naming a role of their own would let them ask where anyone is."""
 		before = self.get_doc_before_save()
-		for field in ("hub_service_user", "employee_token_client", "allow_face_sign_in", "firebase_service_account", "locate_role"):
+		# The Traccar login too: whoever points the address at a server of their own is sent it.
+		for field in ("hub_service_user", "employee_token_client", "allow_face_sign_in", "firebase_service_account", "locate_role",
+				"traccar_url", "traccar_username", "traccar_password"):
 			if (self.get(field) or None) == ((before.get(field) if before else None) or None):
 				continue
 			if "System Manager" not in frappe.get_roles():

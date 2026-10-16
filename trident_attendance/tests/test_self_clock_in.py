@@ -22,6 +22,7 @@ class TestSelfClockInPermission(FrappeTestCase):
 		return permission()
 
 	def test_off_by_default_and_when_off(self):
+		helpers.set_settings(self_clock_in=None)
 		frappe.set_user(self.user)
 		self.assertEqual(permission()["reason"], "off")
 		self.assertEqual(self.ask("Off", "Allowed")["reason"], "off")
