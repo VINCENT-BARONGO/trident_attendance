@@ -248,9 +248,11 @@ def _cut(a, start, end):
 
 @frappe.whitelist()
 def shifts(from_date, to_date) -> dict:
-	"""For the attendance hub: every Shift Type with its times, and the active shift assignments
-	(HR's and employees' own) that touch [from_date, to_date], so the hub reads punches by the
-	same shifts as the ERP. The hub's own login (or a System Manager) only."""
+	"""For the attendance hub: every Shift Type with its times, the active shift assignments
+	(HR's and employees' own) that touch [from_date, to_date], each active employee's Default
+	Shift (what HRMS falls back to on a day without an assignment) and the public holidays in
+	the range, so the hub reads punches by the same shifts and days as the ERP. The hub's own
+	login (or a System Manager) only."""
 	from trident_attendance.shift import _require_hub_or_system_manager
 
 	_require_hub_or_system_manager()
@@ -299,4 +301,51 @@ def shifts(from_date, to_date) -> dict:
 			}
 			for r in rows
 		],
+		"defaults": _defaults(),
+		"holidays": _holidays(start, end),
 	}
+
+
+def _defaults() -> list[dict]:
+	"""Active employees with a Default Shift: the shift HRMS marks them by when no assignment
+	covers a day."""
+	return [
+		{"employee": e.name, "attendance_device_id": e.attendance_device_id, "shift_type": e.default_shift}
+		for e in frappe.get_all(
+			"Employee",
+			filters={"status": "Active", "default_shift": ["is", "set"]},
+			fields=["name", "attendance_device_id", "default_shift"],
+			order_by="name asc",
+		)
+	]
+
+
+def _holidays(start, end) -> list[dict]:
+	"""Public holidays in [start, end] from the Holiday Lists the active employees go by (their
+	own, else their company's default). Weekly offs are left out: the hub knows a shift's work
+	days itself. One row per date."""
+	lists = set(
+		frappe.get_all("Employee", filters={"status": "Active", "holiday_list": ["is", "set"]}, pluck="holiday_list")
+	)
+	companies = set(frappe.get_all("Employee", filters={"status": "Active"}, pluck="company"))
+	for company in companies:
+		default = frappe.db.get_value("Company", company, "default_holiday_list")
+		if default:
+			lists.add(default)
+	if not lists:
+		return []
+	out: dict[str, str] = {}
+	for h in frappe.get_all(
+		"Holiday",
+		filters={
+			"parent": ["in", sorted(lists)],
+			"parenttype": "Holiday List",
+			"holiday_date": ["between", [start, end]],
+			"weekly_off": 0,
+		},
+		fields=["holiday_date", "description"],
+		order_by="holiday_date asc",
+	):
+		day = str(h.holiday_date)
+		out.setdefault(day, frappe.utils.strip_html(h.description or "").strip()[:80] or "Holiday")
+	return [{"date": d, "name": n} for d, n in sorted(out.items())]

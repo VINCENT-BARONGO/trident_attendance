@@ -185,6 +185,34 @@ class TestShiftsForTheHub(ShiftCase):
 		}])
 
 
+	def test_default_shifts_are_sent(self):
+		frappe.db.set_value("Employee", self.employee, "default_shift", DAY)
+		answer = shifts(str(today()), str(add_days(today(), 7)))
+		mine = [d for d in answer["defaults"] if d["employee"] == self.employee]
+		self.assertEqual(mine, [{"employee": self.employee, "attendance_device_id": None, "shift_type": DAY}])
+
+	def test_public_holidays_in_the_range_are_sent_weekly_offs_are_not(self):
+		day = add_days(today(), 2)
+		holidays = frappe.get_doc(
+			{
+				"doctype": "Holiday List",
+				"holiday_list_name": "Tok Holidays",
+				"from_date": add_days(today(), -30),
+				"to_date": add_days(today(), 60),
+				"holidays": [
+					{"holiday_date": day, "description": "<b>Tok Day</b>"},
+					{"holiday_date": add_days(today(), 3), "description": "Sunday", "weekly_off": 1},
+					{"holiday_date": add_days(today(), 40), "description": "Later"},
+				],
+			}
+		).insert(ignore_permissions=True)
+		frappe.db.set_value("Employee", self.employee, "holiday_list", holidays.name)
+		answer = shifts(str(today()), str(add_days(today(), 7)))
+		self.assertIn({"date": str(day), "name": "Tok Day"}, answer["holidays"])
+		self.assertNotIn(str(add_days(today(), 3)), [h["date"] for h in answer["holidays"]])
+		self.assertNotIn(str(add_days(today(), 40)), [h["date"] for h in answer["holidays"]])
+
+
 class TestNightWorkDay(ShiftCase):
 	"""A night shift's 07:00 clock-out belongs to the night it ends."""
 
