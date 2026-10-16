@@ -80,7 +80,13 @@ def _has_punches_since(employee: str, day) -> bool:
 	times = frappe.get_all(
 		"Employee Checkin", filters={"employee": employee, "time": [">=", f"{day} 00:00:00"]}, pluck="time"
 	)
-	return any(work_day.work_date_of(employee, t) >= day for t in times)
+	if any(work_day.work_date_of(employee, t) >= day for t in times):
+		return True
+	# Punches reach the ERP's Employee Checkin only in the hub's nightly batch; the hub signals
+	# each one at once (shift.punched). A punch signalled today locks today too, so a late arrival
+	# cannot set a later shift before the night upload.
+	signal = frappe.db.get_value("Shift Signal", {"employee": employee}, "at") if frappe.db.exists("DocType", "Shift Signal") else None
+	return bool(signal) and work_day.work_date_of(employee, signal) >= day
 
 
 def _changes_today(user: str) -> int:

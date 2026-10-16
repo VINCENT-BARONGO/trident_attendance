@@ -284,6 +284,7 @@ def get_employees(id_number=None, employee=None, include_modified=0, limit=ROSTE
 	the app already holds is still shown after the office sets it to Left.
 	"""
 	_require_supervisor()
+	limit = max(1, min(cint(limit) or ROSTER_LIMIT, ROSTER_LIMIT))
 	id_field = employee_id_field()
 	fields = _employee_fields(id_field)
 	if cint(include_modified):

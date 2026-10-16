@@ -80,6 +80,8 @@ doc_events = {
 			"trident_attendance.shift.on_employee_trash",
 		],
 		"before_rename": "trident_attendance.shift.before_employee_rename",
+		# An employee who leaves or loses App Access keeps no token of their sign-in.
+		"on_update": "trident_attendance.employee_access.on_employee_update",
 		"after_rename": "trident_attendance.employee_pin.after_employee_rename",
 	},
 	"Employee Checkin": {

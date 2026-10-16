@@ -137,10 +137,22 @@ def apply_own_leave(leave_type, from_date, to_date, half_day=0, half_day_date=No
 			"posting_date": nowdate(),
 		}
 	)
-	if leave_approver:
-		doc.leave_approver = leave_approver
+	# The approver is HR's (the Employee's or the department's), never the caller's choice: a
+	# friendly colleague named here would be shared the application to approve.
+	approver = _leave_approver_for(employees[0])
+	if approver:
+		doc.leave_approver = approver
 	doc.insert(ignore_permissions=True)
 	return {field: doc.get(field) for field in LEAVE_ANSWER}
+
+
+def _leave_approver_for(employee: str) -> str | None:
+	"""HRMS's own answer (the Employee's Leave Approver, else the department's first)."""
+	try:
+		from hrms.hr.doctype.leave_application.leave_application import get_leave_approver
+	except ImportError:
+		return frappe.db.get_value("Employee", employee, "leave_approver")
+	return get_leave_approver(employee)
 
 
 @frappe.whitelist(methods=["POST"])

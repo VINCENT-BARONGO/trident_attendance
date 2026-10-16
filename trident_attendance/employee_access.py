@@ -280,6 +280,56 @@ def helper_token_seconds(settings=None) -> int:
 	return min(max(minutes, 1), MAX_HELPER_MINUTES) * 60
 
 
+def _ensure_own_user_permission(user: str, employee: str) -> None:
+	"""The employee's user may only ever see their own Employee and what hangs off it.
+
+	Employee Self Service reads Employee, Leave Application, Salary Slip, Attendance and the
+	rest; it is the User Permission on Employee, applied to every doctype, that narrows those to
+	the person's own. Without it an employee's token reads everyone (on Trident on 16 Oct 2026
+	only 1 of 59 linked users had one; 29 had one for Salary Slip only). So it is made before
+	any token is issued. It only ever narrows what the user sees.
+	"""
+	if frappe.db.exists(
+		"User Permission",
+		{"user": user, "allow": "Employee", "for_value": employee, "apply_to_all_doctypes": 1},
+	):
+		return
+	doc = frappe.get_doc(
+		{
+			"doctype": "User Permission",
+			"user": user,
+			"allow": "Employee",
+			"for_value": employee,
+			"apply_to_all_doctypes": 1,
+			"is_default": 1,
+		}
+	)
+	doc.flags.ignore_permissions = True
+	doc.insert()
+
+
+def on_employee_update(doc, method=None):
+	"""Employee hook: a sign-in ends with what allowed it. An employee who leaves, loses App
+	Access or is linked to another user keeps no token of the old sign-in (own or a colleague's
+	phone, the web app's too)."""
+	before = doc.get_doc_before_save()
+	if before is None or not before.get("user_id"):
+		return
+	lost = (
+		(before.get("status") == "Active" and doc.get("status") != "Active")
+		or (cint(before.get(APP_ACCESS_FIELD)) and not cint(doc.get(APP_ACCESS_FIELD)))
+		or before.get("user_id") != doc.get("user_id")
+	)
+	if not lost:
+		return
+	try:
+		if not _user_state(before.user_id)["self_service_only"]:
+			return  # an office user's own sign-in is not this app's to end
+		_revoke_all(before.user_id)
+	except Exception:
+		frappe.log_error(title="trident_attendance: revoking an employee's tokens failed")
+
+
 def _revoke_all(user: str) -> int:
 	"""Ends every sign-in the user holds through OAuth, whichever client it was issued to.
 
@@ -315,6 +365,7 @@ def _issue_token(row, kind, device, settings, client, scopes, revoke_all=False) 
 	unless `revoke_all` is given.
 	"""
 	user = row.user_id
+	_ensure_own_user_permission(user, row.name)
 	revoked = _revoke_all(user) if revoke_all or kind == KIND_OWN else 0
 	if kind == KIND_OWN:
 		expires_in, refresh_token = OWN_TOKEN_SECONDS, _new_token()
