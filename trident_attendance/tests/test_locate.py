@@ -327,9 +327,10 @@ class TestLocationRequestRows(LocateCase):
 
 
 TRACCAR = "https://traccar.tok-test.example"
-# A site and a point well away from it (about 5 km north).
-SITE = (-1.300000, 36.800000)
-AWAY = (-1.255000, 36.800000)
+# A site and a point well away from it (about 5 km north), in the South Atlantic: no project of
+# the site the tests run on is near.
+SITE = (-30.500000, 10.500000)
+AWAY = (-30.455000, 10.500000)
 
 
 class _Answer:
@@ -379,6 +380,7 @@ class TestLocationAnswer(LocateCase):
 				"doctype": "Project",
 				"project_name": "Tok Test Kingswood",
 				"status": "Open",
+				"company": frappe.db.get_value("Employee", self.employee_a, "company"),
 				"custom_site_latitude": SITE[0],
 				"custom_site_longitude": SITE[1],
 				"custom_geofence_radius_meters": 200,
@@ -410,7 +412,7 @@ class TestLocationAnswer(LocateCase):
 		self.assertEqual(answer["place"], "Mombasa Road, Syokimau, Machakos")
 		self.assertEqual(answer["attribution"], "© OpenStreetMap contributors")
 		for value in answer.values():
-			self.assertNotIn("36.8", str(value))
+			self.assertNotIn("10.5", str(value))
 		self.assertNotIn("latitude", answer)
 		osm = web.asked("openstreetmap")
 		self.assertEqual(len(osm), 1)
@@ -423,6 +425,7 @@ class TestLocationAnswer(LocateCase):
 				"doctype": "Project",
 				"project_name": "Tok Test Next Door",
 				"status": "Open",
+				"company": frappe.db.get_value("Employee", self.employee_a, "company"),
 				"custom_site_latitude": SITE[0] + 0.0015,
 				"custom_site_longitude": SITE[1],
 				"custom_geofence_radius_meters": 300,
