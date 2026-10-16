@@ -51,6 +51,8 @@
   "own_shift_enabled",
   "column_break_own_shift",
   "own_shift_types",
+  "self_clock_in_section",
+  "self_clock_in",
   "locate_section",
   "locate_role",
   "column_break_locate",
@@ -336,6 +338,20 @@
    "fieldname": "own_shift_types",
    "fieldtype": "Small Text",
    "label": "Shifts they may choose"
+  },
+  {
+   "fieldname": "self_clock_in_section",
+   "fieldtype": "Section Break",
+   "label": "Clocking In On Own Phones",
+   "description": "Employees signed in to the employee app with their ID number, PIN and code may clock themselves in and out: on their own registered phone, or on a colleague's through Help a colleague. Only at a clock-in site or inside a project's fence, with a photo, never with a fake location. The attendance hub also has to allow it for the company (Settings > Companies)."
+  },
+  {
+   "default": "Off",
+   "description": "Off: nobody. Ticked employees: only those whose Employee > Clock In On Own Phone is Allowed. Everyone: every employee with app access, except those set to Not allowed.",
+   "fieldname": "self_clock_in",
+   "fieldtype": "Select",
+   "label": "Who may clock in on their phone",
+   "options": "Off\nTicked employees\nEveryone"
   },
   {
    "description": "A person can be asked where they are only while they are clocked in. Every request is recorded as a Location Request (who asked about whom, and when). The phone shows nothing when it is asked: the phone app tells people up front that the office may ask for their location while they are clocked in. The button is Employee > Actions > Locate now.",

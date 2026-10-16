@@ -72,7 +72,7 @@ reject (`custom_logged_by` as an email, face labels outside the Select options).
 ### What the app provides
 
 **Custom fields** — `Employee.custom_id_number / custom_verified / custom_project /
-custom_app_access`;
+custom_app_access / custom_self_clock_in`;
 `Project.custom_site_latitude / custom_site_longitude / custom_geofence_radius_meters`;
 `Employee Checkin.custom_site_project / custom_id_number_scanned / custom_mrz_raw /
 custom_face_match_result / custom_face_match_score / custom_logged_by /

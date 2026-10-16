@@ -34,6 +34,7 @@ DOCTYPES = {
 # Custom fields the tests need, from the fixture; dropped afterwards when the site lacked them.
 FIELDS = [
 	"Employee-custom_app_access",
+	"Employee-custom_self_clock_in",
 	"Newsletter-custom_app_announcement",
 	"Newsletter-custom_app_announced_at",
 	"Leave Application-custom_app_notified_status",
