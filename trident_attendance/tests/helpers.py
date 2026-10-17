@@ -61,6 +61,22 @@ def make_employee(first_name, id_number=None, user=None, app_access=1, status="A
 	return doc
 
 
+def give_holiday_list(employee, holiday_list):
+	"""The employee goes by this holiday list. HRMS v16 reads it from a submitted Holiday List
+	Assignment rather than Employee.holiday_list; v15 has no such doctype."""
+	frappe.db.set_value("Employee", employee, "holiday_list", holiday_list)
+	if frappe.db.exists("DocType", "Holiday List Assignment"):
+		frappe.get_doc(
+			{
+				"doctype": "Holiday List Assignment",
+				"applicable_for": "Employee",
+				"assigned_to": employee,
+				"holiday_list": holiday_list,
+				"from_date": frappe.db.get_value("Holiday List", holiday_list, "from_date"),
+			}
+		).insert(ignore_permissions=True).submit()
+
+
 def make_self_service_employee(first_name, id_number=None, **kwargs):
 	"""An employee linked to a user holding only the self-service roles. The link comes first:
 	ERPNext takes Employee Self Service off a user no Employee points at."""

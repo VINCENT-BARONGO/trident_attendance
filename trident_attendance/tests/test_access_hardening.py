@@ -29,7 +29,7 @@ class TestAccessHardening(FrappeTestCase):
 		frappe.get_doc(
 			{
 				"doctype": "OAuth Bearer Token",
-				"client": client,
+				"client": client.name,
 				"user": self.user,
 				"scopes": "all openid",
 				"access_token": frappe.generate_hash(length=30),

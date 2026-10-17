@@ -116,7 +116,7 @@ class TestOwnLeave(OwnRecordsCase):
 			{"doctype": "Holiday List", "holiday_list_name": "Tok Test Holidays", "from_date": "2026-01-01", "to_date": "2026-12-31"}
 		).insert(ignore_permissions=True)
 		for employee in (self.employee, self.other):
-			frappe.db.set_value("Employee", employee, "holiday_list", holidays.name)
+			helpers.give_holiday_list(employee, holidays.name)
 
 	def apply(self, day="2026-11-03", **kwargs):
 		return apply_own_leave(self.leave_type, day, day, **kwargs)

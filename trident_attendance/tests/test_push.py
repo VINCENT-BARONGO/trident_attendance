@@ -648,6 +648,11 @@ class TestSendTestPush(PushCase):
 		self.assertNotIn(PRIVATE_KEY_MARKER, self.errors_logged[0])
 
 
+def _is_ours(method) -> bool:
+	name = method if isinstance(method, str) else getattr(method, "__module__", "")
+	return str(name).startswith("trident_attendance")
+
+
 class TriggerCase(PushCase):
 	"""Devices for both employees; the queue captured so each trigger's jobs can be read."""
 
@@ -663,8 +668,10 @@ class TriggerCase(PushCase):
 		self.addCleanup(setattr, frappe.flags, "mute_emails", self.mute)
 
 	def jobs(self):
+		"""This app's jobs. Other apps queue their own too: on v16 the newsletter app updates the
+		website search index whenever a Newsletter is saved."""
 		jobs, self.queue.jobs = self.queue.jobs, []
-		return jobs
+		return [j for j in jobs if _is_ours(j["method"])]
 
 
 class TestNewsletterTrigger(TriggerCase):
@@ -729,8 +736,9 @@ class TestLeaveTrigger(TriggerCase):
 			{"doctype": "Holiday List", "holiday_list_name": "Tok Test Holidays", "from_date": f"{year}-01-01", "to_date": f"{year + 1}-12-31"}
 		).insert(ignore_permissions=True).name
 		for employee in (self.employee_a, self.employee_b):
-			frappe.db.set_value("Employee", employee, "holiday_list", self.holidays)
-		self.employee_c = helpers.make_employee("Tokthree", holiday_list=self.holidays).name
+			helpers.give_holiday_list(employee, self.holidays)
+		self.employee_c = helpers.make_employee("Tokthree").name
+		helpers.give_holiday_list(self.employee_c, self.holidays)
 		frappe.db.set_value("Employee", self.employee_c, "user_id", None)
 		self.from_date, self.to_date = add_days(nowdate(), 30), add_days(nowdate(), 31)
 
