@@ -5,7 +5,13 @@ app_description = "Field attendance: ID scan, face match and geofenced check-ins
 app_email = "vbarongo68@gmail.com"
 app_license = "mit"
 
+import frappe
+
 required_apps = ["erpnext", "hrms"]
+# Frappe v16 moved Newsletter, which the app's announcements are built on, out of the framework
+# into its own app (github.com/frappe/newsletter, branch version-16). On v15 it is still built in.
+if int(frappe.__version__.split(".")[0]) >= 16:
+	required_apps.append("newsletter")
 
 # The Custom DocPerm fixture only carries this app's roles; Frappe drops a doctype's standard
 # permissions once any Custom DocPerm exists for it, so the standard rows are copied in.

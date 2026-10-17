@@ -67,9 +67,11 @@ def get_pipeline_stats(days: int = 7) -> dict:
 	pending_days = len({(r.employee, getdate(r.time)) for r in pending_rows})
 	oldest_pending = min((getdate(r.time) for r in pending_rows), default=None)
 
-	last_punch = frappe.db.get_value("Employee Checkin", scope or {"name": ["is", "set"]}, "max(creation)")
-	if isinstance(last_punch, (list, tuple)):
-		last_punch = last_punch[0] if last_punch else None
+	# Not get_value(..., "max(creation)"): v16 refuses SQL functions written as field strings.
+	last_punch = next(
+		iter(frappe.get_all("Employee Checkin", filters=scope, order_by="creation desc", limit=1, pluck="creation")),
+		None,
+	)
 
 	runs = frappe.get_all(
 		"Trident Attendance Run",

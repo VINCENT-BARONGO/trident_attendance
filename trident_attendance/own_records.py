@@ -149,10 +149,16 @@ def apply_own_leave(leave_type, from_date, to_date, half_day=0, half_day_date=No
 def _leave_approver_for(employee: str) -> str | None:
 	"""HRMS's own answer (the Employee's Leave Approver, else the department's first)."""
 	try:
-		from hrms.hr.doctype.leave_application.leave_application import get_leave_approver
+		# v16: the lookup without get_leave_approver's check of who is asking.
+		from hrms.hr.doctype.leave_application.leave_application import get_employee_leave_approver
 	except ImportError:
-		return frappe.db.get_value("Employee", employee, "leave_approver")
-	return get_leave_approver(employee)
+		try:
+			from hrms.hr.doctype.leave_application.leave_application import (
+				get_leave_approver as get_employee_leave_approver,
+			)
+		except ImportError:
+			return frappe.db.get_value("Employee", employee, "leave_approver")
+	return get_employee_leave_approver(employee)
 
 
 @frappe.whitelist(methods=["POST"])

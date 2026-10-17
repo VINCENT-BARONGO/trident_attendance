@@ -50,6 +50,20 @@ def names_in(path):
 	return names
 
 
+def reexports(frappe_root, path):
+	"""(file, names) for each `from frappe.x import ...` at the top level of `path`; names is
+	None for a star import."""
+	out = []
+	for node in ast.parse(path.read_text(encoding="utf-8")).body:
+		if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("frappe."):
+			mod = frappe_root / Path(*node.module.split("."))
+			f = mod.with_suffix(".py") if mod.with_suffix(".py").exists() else mod / "__init__.py"
+			if f.exists():
+				star = any(a.name == "*" for a in node.names)
+				out.append((f, None if star else {a.name for a in node.names}))
+	return out
+
+
 def main(frappe_root: Path) -> int:
 	fr = frappe_root / "frappe"
 	if not (fr / "__init__.py").exists():
@@ -58,6 +72,13 @@ def main(frappe_root: Path) -> int:
 
 	frappe_init = defs_in(fr / "__init__.py")
 	frappe_names = names_in(fr / "__init__.py") | names_in(fr / "exceptions.py")
+	# v16 defines frappe.throw, frappe.get_doc and others in submodules and re-exports them
+	# from frappe/__init__.py; take their signatures from where they are defined.
+	for f, wanted in reexports(frappe_root, fr / "__init__.py"):
+		defs = defs_in(f)
+		frappe_init.update({k: v for k, v in defs.items() if k not in frappe_init and (wanted is None or k in wanted)})
+		if wanted is None:
+			frappe_names |= names_in(f)
 	db_defs = defs_in(fr / "database" / "database.py")
 	db_defs.update({k: v for k, v in defs_in(fr / "database" / "mariadb" / "database.py").items() if k not in db_defs})
 	query_execute = defs_in(fr / "model" / "db_query.py")["execute"]
@@ -116,7 +137,13 @@ def main(frappe_root: Path) -> int:
 						check_kwargs(where, f"frappe.{f.attr}", node.keywords, sig)
 					elif f.attr not in frappe_names and f.attr not in KNOWN_ATTRS:
 						problems.append(f"{where}: frappe.{f.attr} does not exist")
-				elif isinstance(f, ast.Attribute) and f.attr in DOC_METHODS and f.attr in doc_defs and node.keywords:
+				elif (
+					isinstance(f, ast.Attribute)
+					and f.attr in DOC_METHODS
+					and f.attr in doc_defs
+					and node.keywords
+					and not (isinstance(f.value, ast.Name) and f.value.id == "requests")
+				):
 					check_kwargs(where, f"Document.{f.attr}", node.keywords, doc_defs[f.attr])
 			if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "frappe":
 				if node.attr not in frappe_names and node.attr not in frappe_init and node.attr not in KNOWN_ATTRS:

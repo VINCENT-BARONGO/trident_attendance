@@ -333,6 +333,10 @@ def _holidays(start, end) -> list[dict]:
 	lists = set(
 		frappe.get_all("Employee", filters={"status": "Active", "holiday_list": ["is", "set"]}, pluck="holiday_list")
 	)
+	# HRMS v16 assigns holiday lists by Holiday List Assignment (to an employee or a company)
+	# rather than Employee.holiday_list; v15 has no such doctype.
+	if frappe.db.exists("DocType", "Holiday List Assignment"):
+		lists.update(frappe.get_all("Holiday List Assignment", filters={"docstatus": 1}, pluck="holiday_list"))
 	companies = set(frappe.get_all("Employee", filters={"status": "Active"}, pluck="company"))
 	for company in companies:
 		default = frappe.db.get_value("Company", company, "default_holiday_list")

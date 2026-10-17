@@ -416,7 +416,8 @@ def _suggested_out(g, day, settings):
 		}
 		if first_in.custom_site_project:
 			filters["custom_site_project"] = first_in.custom_site_project
-		t = frappe.db.get_value("Employee Checkin", filters, "max(time)")
+		latest = frappe.get_all("Employee Checkin", filters=filters, order_by="time desc", limit=1, pluck="time")
+		t = latest[0] if latest else None
 		if t:
 			return get_datetime(t).strftime("%H:%M")
 	return str(get_time(settings.auto_checkout_time or "17:00:00"))[:5]
