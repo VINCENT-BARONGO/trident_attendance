@@ -1,7 +1,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from trident_attendance.own_records import apply_own_leave, get_own_records, withdraw_own_leave
+from trident_attendance.own_records import apply_own_leave, get_own_photo, get_own_records, withdraw_own_leave
 from trident_attendance.tests import helpers
 
 PROJECT_FIELD = "custom_project"
@@ -101,6 +101,46 @@ class TestOwnRecords(OwnRecordsCase):
 		frappe.set_user(user)
 		self.assertEqual(get_own_records("Employee"), [])
 		self.assertEqual(get_own_records("Employee Checkin"), [])
+
+
+class TestOwnPhoto(OwnRecordsCase):
+	"""My HR's avatar: the person's own photo, past the permissions that hide the file."""
+
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(self.forget_response)
+
+	@staticmethod
+	def forget_response():
+		for key in ("type", "filecontent", "filename"):
+			frappe.local.response.pop(key, None)
+
+	def with_photo(self, employee):
+		frappe.set_user("Administrator")
+		file = helpers.attach_photo(employee)
+		self.addCleanup(frappe.delete_doc, "File", file.name, force=True, ignore_permissions=True)
+
+	def test_own_photo_bytes(self):
+		self.with_photo(self.employee)
+		self.as_employee()
+		get_own_photo()
+		self.assertEqual(frappe.local.response.filecontent, helpers.JPEG)
+		self.assertEqual(frappe.local.response.type, "download")
+		# The read runs as Administrator; the caller must be put back.
+		self.assertEqual(frappe.session.user, self.user)
+
+	def test_never_another_persons_photo(self):
+		self.with_photo(self.other)
+		self.as_employee()
+		with self.assertRaises(frappe.DoesNotExistError):
+			get_own_photo()
+
+	def test_no_employee_or_guest(self):
+		user = helpers.make_user(f"tokloose@{helpers.TEST_DOMAIN}", roles=["Employee"]).name
+		frappe.set_user(user)
+		self.assertRaises(frappe.DoesNotExistError, get_own_photo)
+		frappe.set_user("Guest")
+		self.assertRaises(frappe.PermissionError, get_own_photo)
 
 
 class TestOwnLeave(OwnRecordsCase):
