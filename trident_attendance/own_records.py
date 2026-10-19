@@ -107,6 +107,24 @@ def get_own_records(doctype, fields=None, filters=None, order_by=None, limit=DEF
 	)
 
 
+@frappe.whitelist(methods=["GET"])
+def get_own_photo():
+	"""The signed-in person's own Employee photo (Employee.image) as image bytes, for My HR's
+	avatar. The photo is a private file attached to their Employee record, which the same
+	permissions hide from them, so it is served as get_employee_photo serves it. Only their
+	own: no employee is taken from the caller. The role must still be allowed to read Employee
+	and its `image` field. No photo on the record (or no Employee): DoesNotExistError (404)."""
+	from trident_attendance.api import _serve_photo
+
+	user = require_signed_in()
+	employees = own_employees(user)
+	if not employees:
+		raise frappe.DoesNotExistError(_("No employee record for {0}.").format(user))
+	if not frappe.has_permission("Employee", "read") or "image" not in _readable(frappe.get_meta("Employee"), user):
+		frappe.throw(_("You may not read {0}.").format(_("Employee")), frappe.PermissionError)
+	_serve_photo("Employee", employees[0], "image")
+
+
 LEAVE = "Leave Application"
 LEAVE_ANSWER = ("name", "docstatus", "status", "total_leave_days", "employee")
 
