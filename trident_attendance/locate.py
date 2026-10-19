@@ -49,6 +49,11 @@ ANSWER_WINDOW = timedelta(minutes=3)
 # A position Traccar received this long before the request still counts as the phone's answer:
 # the phone's and the ERP's clocks need not agree to the second.
 ANSWER_SLACK = timedelta(seconds=5)
+# How old a fix the phone may answer with. Asked for "the current location", Android hands
+# back one it already has when it is recent enough, so the fix can be older than the request
+# while Traccar received it after. Traccar's `from` is on the fix time, so it is asked this
+# much further back and the answer is told by when Traccar received it.
+ANSWER_FIX_AGE = timedelta(minutes=15)
 # A project without a radius of its own is a 200 m geofence, as for punches (checkin_rules).
 DEFAULT_RADIUS = 200
 HTTP_TIMEOUT = 8
@@ -227,7 +232,8 @@ def _traccar_get(base, settings, path, params):
 
 
 def _latest_position(base, settings, employee, since_utc: datetime) -> dict | None:
-	"""The newest position Traccar received from the employee's device since `since_utc`, or None."""
+	"""The newest position Traccar received from the employee's device since `since_utc`, or None.
+	Its fix may be older (ANSWER_FIX_AGE)."""
 	devices = _traccar_get(base, settings, "/api/devices", {"uniqueId": employee})
 	device = next((d for d in devices or [] if str(d.get("uniqueId")) == employee), None)
 	if not device:
@@ -235,7 +241,7 @@ def _latest_position(base, settings, employee, since_utc: datetime) -> dict | No
 	now_utc = datetime.now(timezone.utc)
 	params = {
 		"deviceId": device["id"],
-		"from": since_utc.isoformat().replace("+00:00", "Z"),
+		"from": (since_utc - ANSWER_FIX_AGE).isoformat().replace("+00:00", "Z"),
 		"to": (now_utc + timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
 	}
 	latest = None

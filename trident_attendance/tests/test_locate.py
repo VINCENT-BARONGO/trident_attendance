@@ -365,9 +365,11 @@ class FakeWeb:
 		return [c for c in self.calls if part in c[0]]
 
 
-def position(lat_lon, seconds_ago=5, accuracy=12.0):
-	at = (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).isoformat()
-	return {"latitude": lat_lon[0], "longitude": lat_lon[1], "fixTime": at, "serverTime": at, "accuracy": accuracy}
+def position(lat_lon, seconds_ago=5, accuracy=12.0, fix_seconds_ago=None):
+	now = datetime.now(timezone.utc)
+	at = (now - timedelta(seconds=seconds_ago)).isoformat()
+	fixed = (now - timedelta(seconds=seconds_ago if fix_seconds_ago is None else fix_seconds_ago)).isoformat()
+	return {"latitude": lat_lon[0], "longitude": lat_lon[1], "fixTime": fixed, "serverTime": at, "accuracy": accuracy}
 
 
 class TestLocationAnswer(LocateCase):
@@ -451,6 +453,15 @@ class TestLocationAnswer(LocateCase):
 		self.assertEqual(self.answer(web), {"status": "waiting"})
 		web.positions.append(position(AWAY, seconds_ago=1))
 		self.assertEqual(self.answer(web)["place"], "Mombasa Road, Syokimau, Machakos")
+
+	def test_an_answer_with_a_fix_from_before_the_request(self):
+		# Android answered "where are you now" with a fix it already had: taken before the
+		# request, received by Traccar after it. Traccar's `from` is on the fix time.
+		web = FakeWeb(self.employee_a, [position(AWAY, seconds_ago=1, fix_seconds_ago=50)])
+		answer = self.answer(web)
+		self.assertEqual((answer["status"], answer["minutes_ago"]), ("found", 0))
+		asked_from = datetime.fromisoformat(web.asked("/api/positions")[0][1]["from"].replace("Z", "+00:00"))
+		self.assertLess(asked_from, datetime.now(timezone.utc) - timedelta(minutes=14))
 
 	def test_the_newest_answer_wins(self):
 		web = FakeWeb(self.employee_a, [position(SITE, seconds_ago=1), position(AWAY, seconds_ago=3)])
