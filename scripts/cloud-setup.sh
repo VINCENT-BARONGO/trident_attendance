@@ -79,9 +79,31 @@ ln -sf /opt/bench-cli/bin/uv /usr/local/bin/uv
 
 # --- the bench ---
 if [ ! -d "$BENCH/apps/frappe" ]; then
-  step "bench init ($BRANCH)"
+  # The cloud proxy refuses codeload.github.com whatever the network setting says, and yarn
+  # fetches "github:" packages (frappe's air-datepicker) from there. Git through github.com
+  # works, so a local copy of frappe gets those packages pointed at git URLs first.
+  step "frappe source ($BRANCH), github: packages via git"
+  SRC=/home/frappe/frappe-src
+  rm -rf "$SRC"
+  $RUN "git clone --quiet --depth 1 --branch $BRANCH https://github.com/frappe/frappe.git $SRC"
+  $RUN "cd $SRC && python3 - <<'EOF'
+import re
+lock = open('yarn.lock').read()
+# Lock blocks: \"name@github:owner/repo\": ... resolved \"https://codeload.github.com/owner/repo/tar.gz/sha\"
+blocks = re.findall(r'^\"?([^\s\"]+)@github:([\w.-]+/[\w.-]+)[^\n]*:\n(?:  .*\n)*?  resolved \"https://codeload\.github\.com/[\w.-]+/[\w.-]+/tar\.gz/(\w+)\"', lock, re.M)
+pkg = open('package.json').read()
+for name, repo, sha in blocks:
+    git = f'git+https://github.com/{repo}.git#{sha}'
+    lock = re.sub(rf'^\"?{re.escape(name)}@github:{re.escape(repo)}[^\n]*:$', f'\"{name}@{git}\":', lock, flags=re.M)
+    lock = lock.replace(f'https://codeload.github.com/{repo}/tar.gz/{sha}', git)
+    pkg = re.sub(rf'\"github:{re.escape(repo)}(#[^\"]*)?\"', f'\"{git}\"', pkg)
+    print('via git:', name, git)
+open('yarn.lock', 'w').write(lock)
+open('package.json', 'w').write(pkg)
+EOF
+git -c user.name=cloud -c user.email=cloud@localhost commit --quiet -am 'github: packages via git'"
   rm -rf "$BENCH"
-  $RUN "cd /home/frappe && bench init --frappe-branch $BRANCH --skip-redis-config-generation --skip-assets --python python3 bench"
+  $RUN "cd /home/frappe && bench init --frappe-path $SRC --frappe-branch $BRANCH --skip-redis-config-generation --skip-assets --python python3 bench"
 fi
 cd "$BENCH"
 for app in erpnext hrms; do
