@@ -10,6 +10,9 @@
 #
 #   su frappe -c "cd /home/frappe/bench && bench --site test.localhost run-tests --app trident_attendance"
 #
+# Network: the cloud environment must allow codeload.github.com (Frappe's yarn packages
+# include github: tarballs); the default "Trusted" list blocks it.
+#
 # FRAPPE_BRANCH=version-16 builds a v16 bench instead (needs Python 3.14 and Node 24,
 # plus the newsletter app; not tried here yet).
 set -euo pipefail
@@ -30,12 +33,22 @@ if ! command -v mariadb >/dev/null || ! command -v node >/dev/null || ! command 
     mariadb-server mariadb-client libmariadb-dev pkg-config git curl cron \
     python3-dev python3-venv python3-pip build-essential xvfb libfontconfig >/dev/null
 fi
-if ! node -e 'process.exit(+process.versions.node.split(".")[0] < 18)' 2>/dev/null; then
-  step "node 20"
-  curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null
-  apt-get install -y -qq nodejs >/dev/null
+# The image ships Node 22 in /opt/node22/bin (deb.nodesource.com is blocked); Ubuntu's own
+# nodejs is the fallback.
+if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) < 18 ? 1 : 0)' 2>/dev/null; then
+  step "nodejs from apt"
+  apt-get install -y -qq nodejs npm >/dev/null
 fi
 command -v yarn >/dev/null || npm install -g --silent yarn
+# su resets PATH, so the frappe user sees only /usr/local/bin and the like.
+for b in node npm npx yarn; do ln -sf "$(command -v $b)" /usr/local/bin/$b 2>/dev/null || true; done
+
+# The session's TLS bundle sits under /root, which the frappe user cannot read: share a copy.
+if [ -n "${SSL_CERT_FILE:-}" ] && [ -r "$SSL_CERT_FILE" ] && [ "${SSL_CERT_FILE#/root/}" != "$SSL_CERT_FILE" ]; then
+  install -m 644 "$SSL_CERT_FILE" /opt/ca-bundle.crt
+  export SSL_CERT_FILE=/opt/ca-bundle.crt CURL_CA_BUNDLE=/opt/ca-bundle.crt REQUESTS_CA_BUNDLE=/opt/ca-bundle.crt \
+    NODE_EXTRA_CA_CERTS=/opt/ca-bundle.crt GIT_SSL_CAINFO=/opt/ca-bundle.crt
+fi
 
 # --- MariaDB, set up the way Frappe wants it ---
 cat > /etc/mysql/mariadb.conf.d/99-frappe.cnf <<'EOF'
@@ -58,9 +71,11 @@ id frappe >/dev/null 2>&1 || useradd -m -s /bin/bash frappe
 if [ ! -x /opt/bench-cli/bin/bench ]; then
   step "bench CLI"
   python3 -m venv /opt/bench-cli
-  /opt/bench-cli/bin/pip install --quiet frappe-bench
+  /opt/bench-cli/bin/pip install --quiet frappe-bench uv
 fi
+[ -x /opt/bench-cli/bin/uv ] || /opt/bench-cli/bin/pip install --quiet uv   # bench init runs `uv venv`
 ln -sf /opt/bench-cli/bin/bench /usr/local/bin/bench
+ln -sf /opt/bench-cli/bin/uv /usr/local/bin/uv
 
 # --- the bench ---
 if [ ! -d "$BENCH/apps/frappe" ]; then
