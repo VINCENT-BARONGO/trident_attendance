@@ -37,7 +37,9 @@ class TestCasualApproval(FrappeTestCase):
 		doc = self.register()
 		self.assertEqual(doc.status, "Pending Approval")
 		self.assertEqual((doc.daily_rate, doc.mpesa_number, doc.subcontractor_name), (900, "254712345678", "Tok Labour Ltd"))
+		frappe.set_user(self.marker)                                          # the phone asks as its supervisor
 		self.assertEqual(get_casuals(id_number="98765432"), [], "the phone does not find a casual not yet approved")
+		frappe.set_user(self.registrar)
 		with self.assertRaises(frappe.ValidationError):
 			apply_workflow(frappe.get_doc(DT, doc.name), "Approve")          # the registrar may not approve
 		frappe.set_user(self.approver)
@@ -76,13 +78,13 @@ class TestCasualApproval(FrappeTestCase):
 			with self.assertRaises(frappe.PermissionError, msg=field):
 				mine.save()
 		with self.assertRaises(frappe.PermissionError):
-			frappe.get_doc({"doctype": "File", "file_name": "swap.jpg", "content": b"\xff\xd8\xff",
+			frappe.get_doc({"doctype": "File", "file_name": "swap.jpg", "content": helpers.JPEG,
 			                "attached_to_doctype": DT, "attached_to_name": doc.name, "attached_to_field": "photo",
 			                "is_private": 1}).insert()
 
 	def test_an_approved_casuals_photo_file_is_not_deleted_or_replaced(self):
 		doc = self.register("55566677")
-		face = frappe.get_doc({"doctype": "File", "file_name": "tok-face.jpg", "content": b"\xff\xd8\xff\xe0face",
+		face = frappe.get_doc({"doctype": "File", "file_name": "tok-face.jpg", "content": helpers.JPEG,
 		                       "attached_to_doctype": DT, "attached_to_name": doc.name, "attached_to_field": "photo",
 		                       "is_private": 1}).insert()
 		mine = frappe.get_doc(DT, doc.name)
