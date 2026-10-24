@@ -62,6 +62,29 @@ class TestCasualApproval(FrappeTestCase):
 		apply_workflow(frappe.get_doc(DT, doc.name), "Reactivate")
 		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Active")
 
+	def test_once_approved_only_the_approver_changes_the_pay_and_the_photo(self):
+		doc = self.register("44455566")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		frappe.set_user(self.registrar)
+		mine = frappe.get_doc(DT, doc.name)
+		mine.next_of_kin_name = "Jane Tok Test"
+		mine.save()                                                           # other details: still theirs
+		for field, value in (("daily_rate", 5000), ("mpesa_number", "254799999999"), ("photo", "/files/other.jpg")):
+			mine = frappe.get_doc(DT, doc.name)
+			mine.set(field, value)
+			with self.assertRaises(frappe.PermissionError, msg=field):
+				mine.save()
+		with self.assertRaises(frappe.PermissionError):
+			frappe.get_doc({"doctype": "File", "file_name": "swap.jpg", "content": b"\xff\xd8\xff",
+			                "attached_to_doctype": DT, "attached_to_name": doc.name, "attached_to_field": "photo",
+			                "is_private": 1}).insert()
+		frappe.set_user(self.approver)
+		theirs = frappe.get_doc(DT, doc.name)
+		theirs.daily_rate = 1000
+		theirs.save()
+		self.assertEqual(frappe.db.get_value(DT, doc.name, ["daily_rate", "next_of_kin_name"]), (1000, "Jane Tok Test"))
+
 	def test_attendance_marking_no_longer_registers_and_never_sees_pay(self):
 		frappe.set_user(self.marker)
 		self.assertFalse(frappe.has_permission(DT, "create"))

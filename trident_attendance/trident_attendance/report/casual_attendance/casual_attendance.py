@@ -42,7 +42,8 @@ def rows(from_date, to_date, filters):
 		conditions["casual_labourer"] = filters.casual_labourer
 	if filters.project:
 		conditions["project"] = filters.project
-	punches = frappe.get_all(
+	# get_list, not get_all: the caller's permissions and User Permissions (a project, a casual) apply.
+	punches = frappe.get_list(
 		"Casual Checkin",
 		filters=conditions,
 		fields=["casual_labourer", "full_name", "id_number", "log_type", "time", "project"],
@@ -93,4 +94,4 @@ def labourers(names):
 	fields = ["name", "full_name", "id_number"]
 	if frappe.get_meta("Casual Labourer").has_field("subcontractor"):
 		fields += ["subcontractor", "subcontractor_name"]
-	return {r.name: r for r in frappe.get_all("Casual Labourer", filters={"name": ["in", list(names)]}, fields=fields)}
+	return {r.name: r for r in frappe.get_list("Casual Labourer", filters={"name": ["in", list(names)]}, fields=fields)}

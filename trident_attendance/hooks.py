@@ -120,6 +120,10 @@ doc_events = {
 	"Workflow Action": {
 		"after_insert": "trident_attendance.push_hooks.workflow_action_after_insert",
 	},
+	# A file sent straight to an approved casual's photo field is the approver's, like the field.
+	"File": {
+		"before_insert": "trident_attendance.trident_attendance.doctype.casual_labourer.casual_labourer.file_before_insert",
+	},
 }
 
 # ---------------------------------------------------------------------------
