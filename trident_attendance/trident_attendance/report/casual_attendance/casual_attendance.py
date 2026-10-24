@@ -94,4 +94,6 @@ def labourers(names):
 	fields = ["name", "full_name", "id_number"]
 	if frappe.get_meta("Casual Labourer").has_field("subcontractor"):
 		fields += ["subcontractor", "subcontractor_name"]
-	return {r.name: r for r in frappe.get_list("Casual Labourer", filters={"name": ["in", list(names)]}, fields=fields)}
+	# get_all: only the casuals of punches the caller may already read (get_list above), and
+	# Attendance Marking, which may run this report, cannot read Casual Labourer itself.
+	return {r.name: r for r in frappe.get_all("Casual Labourer", filters={"name": ["in", list(names)]}, fields=fields)}

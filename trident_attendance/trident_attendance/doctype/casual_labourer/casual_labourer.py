@@ -12,7 +12,7 @@ from trident_attendance.utils import employee_id_field
 APPROVED_FIELDS = ("full_name", "id_number", "photo", "subcontractor", "daily_rate", "mpesa_number", "bank_name",
                    "bank_account_no")
 APPROVED_STATES = ("Active", "Left")
-APPROVER_ROLES = {"Casual Approver", "HR Manager", "System Manager"}
+APPROVER_ROLES = {"Casual Approver", "HR Manager", "HR User", "Attendance Admin", "System Manager"}
 
 
 def may_change_approved():
@@ -38,9 +38,14 @@ def _refuse_photo_change():
 	             frappe.PermissionError)
 
 
+# These run for every File on the site: the role check first, the one query only after it.
 def file_before_insert(doc, method=None):
-	"""upload_file with fieldname=photo may set the field itself: the same rule as a save."""
-	if _approved_photo(doc) and not may_change_approved():
+	"""upload_file with fieldname=photo may set the field itself: the same rule as a save. Frappe's
+	own copy of a file already in the photo field onto the record (attach_files_to_document, on
+	every save) is the same file, not a new face, and passes."""
+	if doc.flags.copy_from_existing_file or may_change_approved():
+		return
+	if _approved_photo(doc):
 		_refuse_photo_change()
 
 
@@ -55,7 +60,7 @@ def file_validate(doc, method=None):
 
 
 def file_on_trash(doc, method=None):
-	if _approved_photo(doc) and not may_change_approved():
+	if not may_change_approved() and _approved_photo(doc):
 		_refuse_photo_change()
 
 
@@ -68,6 +73,7 @@ class CasualLabourer(Document):
 		self._clean_id_number()
 		self._check_not_an_employee()
 		self._check_approved_fields()
+		self._check_not_self_approved()
 		if self.start_date and self.end_date and self.end_date < self.start_date:
 			frappe.throw(_("End Date cannot be before Start Date."))
 
@@ -83,6 +89,15 @@ class CasualLabourer(Document):
 				),
 				frappe.PermissionError,
 			)
+
+	def _check_not_self_approved(self):
+		# apply_workflow refuses it (allow_self_approval 0); a plain save of the Status must too.
+		before = self.get_doc_before_save()
+		if before is None or before.status != "Pending Approval" or self.status != "Active":
+			return
+		if self.owner == frappe.session.user and frappe.session.user != "Administrator":
+			frappe.throw(_("Whoever registered {0} may not approve them: another Casual Approver does.").format(
+				self.full_name), frappe.PermissionError)
 
 	def _clean_id_number(self):
 		# Kept as printed digits only, so it compares with what the app reads off the card.

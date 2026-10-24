@@ -119,6 +119,56 @@ class TestCasualApproval(FrappeTestCase):
 	def test_the_workflow_is_made_once(self):
 		self.assertTrue(frappe.db.exists("Workflow", install.CASUAL_WORKFLOW))
 		self.assertFalse(install.ensure_casual_approval(), "a second run changes nothing")
+		wf = frappe.get_doc("Workflow", install.CASUAL_WORKFLOW)
+		wf.transitions = [t for t in wf.transitions if t.action != "Blacklist"]
+		wf.save(ignore_permissions=True)
+		self.assertTrue(install.ensure_casual_approval(), "a migrate puts back a missing transition")
+		self.assertTrue(any(t.action == "Blacklist" for t in frappe.get_doc("Workflow", install.CASUAL_WORKFLOW).transitions))
+
+	def test_nobody_waits_on_a_working_casual(self):
+		doc = self.register("66677788")
+		waiting = lambda: frappe.get_all("Workflow Action", filters={"reference_name": doc.name, "status": "Open"},
+		                                 pluck="user")
+		self.assertIn(self.approver, waiting(), "the approver waits on a new casual")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		self.assertEqual(waiting(), [], "nobody waits on an Active casual")
+		frappe.set_user(self.registrar)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Deactivate")
+		self.assertEqual(waiting(), [], "nor on one who left")
+
+	def test_blacklisted_and_back(self):
+		doc = self.register("77788899")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		apply_workflow(frappe.get_doc(DT, doc.name), "Blacklist")
+		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Blacklisted")
+		frappe.set_user("Administrator")
+		self.assertEqual(get_casuals(id_number="77788899"), [], "the phone does not find a blacklisted casual")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Lift Blacklist")
+		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Left")
+
+	def test_an_approver_who_registered_a_casual_does_not_approve_them_by_a_save(self):
+		both = helpers.make_user(f"both@{helpers.TEST_DOMAIN}", roles=("Casual Registrar", "Casual Approver")).name
+		frappe.set_user(both)
+		doc = frappe.get_doc({"doctype": DT, "full_name": "Ann Tok Test", "id_number": "88899900",
+		                      "daily_rate": 800, "mpesa_number": "254711111111"}).insert()
+		doc.status = "Active"
+		with self.assertRaises(frappe.PermissionError):
+			doc.save()
+
+	def test_attendance_marking_runs_the_casual_attendance_report(self):
+		doc = self.register("99900011")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		frappe.set_user("Administrator")
+		frappe.get_doc({"doctype": "Casual Checkin", "casual_labourer": doc.name, "log_type": "IN",
+		                "time": "2026-10-20 07:00:00", "client_uid": frappe.generate_hash(length=12)}).insert(
+			ignore_permissions=True)
+		frappe.set_user(self.marker)
+		_, rows = report.execute({"from_date": "2026-10-20", "to_date": "2026-10-20"})
+		self.assertEqual([(r["casual_labourer"], r["full_name"]) for r in rows], [(doc.name, "Peter Tok Test")])
 
 
 class TestCasualAttendance(FrappeTestCase):

@@ -45,33 +45,44 @@ def after_migrate():
 # The web app's Casual labourers page creates a Casual Labourer as "Pending Approval" for whoever
 # holds Casual Registrar; someone with Casual Approver approves it (or rejects it) in My HR >
 # Approvals or the ERP, and only then is it Active, which is all the phone's scan finds
-# (api.get_casuals). The workflow runs on the Status field itself. It is made only when missing:
-# an administrator may change it afterwards and a migrate leaves it alone.
+# (api.get_casuals). The workflow runs on the Status field itself. A migrate adds whatever of it
+# is missing (a state row, a transition) and changes nothing an administrator set.
+#
+# Active, Left and Blacklisted are optional states: Frappe makes a Workflow Action (an item in
+# "Waiting for me", and a push to the phone) only for a step into a state that is not optional,
+# so a working casual never waits on anyone; Pending Approval waits on the approver and Rejected
+# on the registrar (Send Again).
 
 CASUAL_ROLES = ("Casual Registrar", "Casual Approver")
 CASUAL_WORKFLOW = "Casual Labourer Approval"
+CASUAL_EDITORS = ("Casual Registrar", "Casual Approver", "HR Manager", "HR User", "Attendance Admin")
 CASUAL_STATES = (
-	# state, who may edit a casual in it
-	("Pending Approval", "Casual Registrar"),
-	("Active", "Casual Registrar"),
-	("Rejected", "Casual Registrar"),
-	("Left", "Casual Registrar"),
+	# state, optional (no one waits on a casual in it)
+	("Pending Approval", 0),
+	("Active", 1),
+	("Rejected", 0),
+	("Left", 1),
+	("Blacklisted", 1),
 )
-CASUAL_TRANSITIONS = (
+CASUAL_TRANSITIONS = tuple(
 	# from, action, to, role, self approval
-	("Pending Approval", "Approve", "Active", "Casual Approver", 0),
-	("Pending Approval", "Reject", "Rejected", "Casual Approver", 0),
-	("Rejected", "Send Again", "Pending Approval", "Casual Registrar", 1),
-	("Active", "Deactivate", "Left", "Casual Registrar", 1),
-	("Active", "Deactivate", "Left", "Casual Approver", 1),
-	("Left", "Reactivate", "Active", "Casual Registrar", 1),
-	("Left", "Reactivate", "Active", "Casual Approver", 1),
+	[
+		("Pending Approval", "Approve", "Active", "Casual Approver", 0),
+		("Pending Approval", "Reject", "Rejected", "Casual Approver", 0),
+		("Rejected", "Send Again", "Pending Approval", "Casual Registrar", 1),
+	]
+	+ [("Active", "Deactivate", "Left", r, 1) for r in ("Casual Registrar", "Casual Approver", "HR Manager", "HR User")]
+	+ [("Left", "Reactivate", "Active", r, 1) for r in ("Casual Registrar", "Casual Approver", "HR Manager", "HR User")]
+	+ [("Active", "Blacklist", "Blacklisted", r, 1) for r in ("Casual Approver", "HR Manager")]
+	+ [("Left", "Blacklist", "Blacklisted", r, 1) for r in ("Casual Approver", "HR Manager")]
+	+ [("Blacklisted", "Lift Blacklist", "Left", r, 1) for r in ("Casual Approver", "HR Manager")]
 )
 
 
 def ensure_casual_approval():
-	"""The two roles, the workflow's states and actions, and the workflow itself, each only when
-	missing. Safe to run repeatedly."""
+	"""The two roles, the workflow's states and actions, the workflow, and each of its state rows
+	(one per role that may edit) and transitions, each only when missing. Returns True when it
+	changed the workflow. Safe to run repeatedly."""
 	if not frappe.db.exists("DocType", "Casual Labourer"):
 		return False
 	for role in CASUAL_ROLES:
@@ -85,25 +96,43 @@ def ensure_casual_approval():
 			frappe.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(
 				ignore_permissions=True
 			)
-	if frappe.db.exists("Workflow", CASUAL_WORKFLOW):
+	states = [
+		{"state": s, "doc_status": "0", "allow_edit": role, "is_optional_state": optional}
+		for s, optional in CASUAL_STATES
+		for role in CASUAL_EDITORS
+	]
+	transitions = [
+		{"state": a, "action": act, "next_state": b, "allowed": role, "allow_self_approval": own}
+		for a, act, b, role, own in CASUAL_TRANSITIONS
+	]
+	if not frappe.db.exists("Workflow", CASUAL_WORKFLOW):
+		frappe.get_doc(
+			{
+				"doctype": "Workflow",
+				"workflow_name": CASUAL_WORKFLOW,
+				"document_type": "Casual Labourer",
+				"workflow_state_field": "status",
+				"is_active": 1,
+				"send_email_alert": 0,
+				"states": states,
+				"transitions": transitions,
+			}
+		).insert(ignore_permissions=True)
+		frappe.logger("trident_attendance").info(f"Workflow {CASUAL_WORKFLOW} made")
+		return True
+	wf = frappe.get_doc("Workflow", CASUAL_WORKFLOW)
+	have_states = {(d.state, d.allow_edit) for d in wf.states}
+	have_moves = {(d.state, d.action, d.next_state, d.allowed) for d in wf.transitions}
+	added = [wf.append("states", s) for s in states if (s["state"], s["allow_edit"]) not in have_states]
+	added += [
+		wf.append("transitions", t)
+		for t in transitions
+		if (t["state"], t["action"], t["next_state"], t["allowed"]) not in have_moves
+	]
+	if not added:
 		return False
-	wf = frappe.get_doc(
-		{
-			"doctype": "Workflow",
-			"workflow_name": CASUAL_WORKFLOW,
-			"document_type": "Casual Labourer",
-			"workflow_state_field": "status",
-			"is_active": 1,
-			"send_email_alert": 0,
-			"states": [{"state": s, "doc_status": "0", "allow_edit": role} for s, role in CASUAL_STATES],
-			"transitions": [
-				{"state": a, "action": act, "next_state": b, "allowed": role, "allow_self_approval": own}
-				for a, act, b, role, own in CASUAL_TRANSITIONS
-			],
-		}
-	)
-	wf.insert(ignore_permissions=True)
-	frappe.logger("trident_attendance").info(f"Workflow {CASUAL_WORKFLOW} made")
+	wf.save(ignore_permissions=True)
+	frappe.logger("trident_attendance").info(f"Workflow {CASUAL_WORKFLOW}: {len(added)} rows added")
 	return True
 
 
