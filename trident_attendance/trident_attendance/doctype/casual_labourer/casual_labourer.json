@@ -27,6 +27,8 @@
   "company",
   "project",
   "supervisor",
+  "subcontractor",
+  "subcontractor_name",
   "column_break_work",
   "trade",
   "daily_rate",
@@ -158,6 +160,20 @@
    "options": "Employee"
   },
   {
+   "fieldname": "subcontractor",
+   "fieldtype": "Link",
+   "label": "Subcontractor",
+   "options": "Supplier",
+   "description": "The supplier who provides this labourer; empty when hired directly."
+  },
+  {
+   "fieldname": "subcontractor_name",
+   "fieldtype": "Data",
+   "label": "Subcontractor Name",
+   "fetch_from": "subcontractor.supplier_name",
+   "read_only": 1
+  },
+  {
    "fieldname": "column_break_work",
    "fieldtype": "Column Break"
   },
@@ -169,7 +185,8 @@
   {
    "fieldname": "daily_rate",
    "fieldtype": "Currency",
-   "label": "Daily Rate"
+   "label": "Daily Rate",
+   "permlevel": 1
   },
   {
    "fieldname": "start_date",
@@ -191,7 +208,8 @@
    "fieldname": "mpesa_number",
    "fieldtype": "Data",
    "label": "M-Pesa Number",
-   "options": "Phone"
+   "options": "Phone",
+   "permlevel": 1
   },
   {
    "fieldname": "column_break_payment",
@@ -200,12 +218,14 @@
   {
    "fieldname": "bank_name",
    "fieldtype": "Data",
-   "label": "Bank"
+   "label": "Bank",
+   "permlevel": 1
   },
   {
    "fieldname": "bank_account_no",
    "fieldtype": "Data",
-   "label": "Bank Account No."
+   "label": "Bank Account No.",
+   "permlevel": 1
   },
   {
    "collapsible": 1,
@@ -222,7 +242,7 @@
  "image_field": "photo",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-09-29 09:00:00.000000",
+ "modified": "2026-10-24 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Casual Labourer",
@@ -270,6 +290,40 @@
    "print": 1,
    "read": 1,
    "report": 1,
+   "role": "Attendance Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Attendance Marking",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "HR User",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
    "role": "Attendance Admin",
    "write": 1
   }
