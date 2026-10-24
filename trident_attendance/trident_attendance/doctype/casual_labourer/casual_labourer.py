@@ -19,14 +19,44 @@ def may_change_approved():
 	return frappe.session.user == "Administrator" or bool(APPROVER_ROLES & set(frappe.get_roles()))
 
 
+def _approved_photo(file):
+	"""True when this File is, or would become, an approved casual's photo: attached to the photo
+	field of an Active / Left casual, or at a URL such a casual's photo points to (a file deleted and
+	uploaded again under the same name would otherwise swap the face behind an unchanged field)."""
+	if not file:
+		return False
+	if file.attached_to_doctype == "Casual Labourer" and file.attached_to_field in APPROVED_FIELDS:
+		if frappe.db.get_value("Casual Labourer", file.attached_to_name, "status") in APPROVED_STATES:
+			return True
+	return bool(file.file_url) and bool(
+		frappe.db.exists("Casual Labourer", {"photo": file.file_url, "status": ["in", list(APPROVED_STATES)]})
+	)
+
+
+def _refuse_photo_change():
+	frappe.throw(_("This casual was approved: only a Casual Approver or HR may change their photo."),
+	             frappe.PermissionError)
+
+
 def file_before_insert(doc, method=None):
 	"""upload_file with fieldname=photo may set the field itself: the same rule as a save."""
-	if doc.attached_to_doctype != "Casual Labourer" or doc.attached_to_field not in APPROVED_FIELDS:
+	if _approved_photo(doc) and not may_change_approved():
+		_refuse_photo_change()
+
+
+def file_validate(doc, method=None):
+	"""An approved casual's photo file is not moved, renamed or pointed elsewhere."""
+	if doc.is_new() or may_change_approved():
 		return
-	status = frappe.db.get_value("Casual Labourer", doc.attached_to_name, "status")
-	if status in APPROVED_STATES and not may_change_approved():
-		frappe.throw(_("This casual was approved: only a Casual Approver or HR may change their photo."),
-		             frappe.PermissionError)
+	before = doc.get_doc_before_save()
+	keys = ("file_url", "attached_to_doctype", "attached_to_name", "attached_to_field")
+	if before is not None and any(doc.get(k) != before.get(k) for k in keys) and _approved_photo(before):
+		_refuse_photo_change()
+
+
+def file_on_trash(doc, method=None):
+	if _approved_photo(doc) and not may_change_approved():
+		_refuse_photo_change()
 
 
 class CasualLabourer(Document):
