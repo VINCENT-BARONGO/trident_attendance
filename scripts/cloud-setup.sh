@@ -109,11 +109,11 @@ cd "$BENCH"
 for app in erpnext hrms; do
   if [ ! -d "apps/$app" ]; then
     step "get-app $app"
-    $RUN "cd $BENCH && bench get-app --branch $BRANCH --skip-assets $app"
+    $RUN "cd $BENCH && bench get-app --branch $BRANCH --skip-assets https://github.com/frappe/$app.git"
   fi
 done
 if [ "$BRANCH" != version-15 ] && [ ! -d apps/newsletter ]; then
-  $RUN "cd $BENCH && bench get-app --branch $BRANCH --skip-assets newsletter"
+  $RUN "cd $BENCH && bench get-app --branch $BRANCH --skip-assets https://github.com/frappe/newsletter.git"
 fi
 
 # This checkout, copied in fresh every run (the bench must not write into the repo).
