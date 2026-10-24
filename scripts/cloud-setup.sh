@@ -43,11 +43,12 @@ command -v yarn >/dev/null || npm install -g --silent yarn
 # su resets PATH, so the frappe user sees only /usr/local/bin and the like.
 for b in node npm npx yarn; do ln -sf "$(command -v $b)" /usr/local/bin/$b 2>/dev/null || true; done
 
-# The session's TLS bundle sits under /root, which the frappe user cannot read: share a copy.
-if [ -n "${SSL_CERT_FILE:-}" ] && [ -r "$SSL_CERT_FILE" ] && [ "${SSL_CERT_FILE#/root/}" != "$SSL_CERT_FILE" ]; then
-  install -m 644 "$SSL_CERT_FILE" /opt/ca-bundle.crt
-  export SSL_CERT_FILE=/opt/ca-bundle.crt CURL_CA_BUNDLE=/opt/ca-bundle.crt REQUESTS_CA_BUNDLE=/opt/ca-bundle.crt \
-    NODE_EXTRA_CA_CERTS=/opt/ca-bundle.crt GIT_SSL_CAINFO=/opt/ca-bundle.crt
+# The session's TLS bundle is /root/.ccr/ca-bundle.crt and every CA variable (SSL_CERT_FILE,
+# HTTPLIB2_CA_CERTS, ...) points there; `su frappe` keeps those variables but cannot enter /root.
+# Let it through to that one file (a throwaway VM), so later `su frappe` test runs work too.
+if [ -f /root/.ccr/ca-bundle.crt ]; then
+  chmod o+x /root /root/.ccr
+  chmod o+r /root/.ccr/ca-bundle.crt
 fi
 
 # --- MariaDB, set up the way Frappe wants it ---
@@ -123,6 +124,8 @@ cp -a "$REPO/." apps/trident_attendance/
 rm -rf apps/trident_attendance/.git
 chown -R frappe: apps/trident_attendance
 $RUN "cd $BENCH && ./env/bin/pip install --quiet -e apps/trident_attendance"
+# bench writes apps.txt without a final newline: add one before appending.
+[ -z "$(tail -c1 sites/apps.txt)" ] || echo >> sites/apps.txt
 grep -qx trident_attendance sites/apps.txt || echo trident_attendance >> sites/apps.txt
 
 # --- Redis: cache and queue on the ports bench expects ---
@@ -131,6 +134,11 @@ redis-cli -p 11000 ping >/dev/null 2>&1 || redis-server --port 11000 --daemonize
 $RUN "cd $BENCH && bench set-config -g redis_cache redis://127.0.0.1:13000 && bench set-config -g redis_queue redis://127.0.0.1:11000 && bench set-config -g redis_socketio redis://127.0.0.1:13000" >/dev/null
 
 # --- the test site ---
+# A site left half-made by an earlier failed run is dropped and made again.
+if [ -d "sites/$SITE" ] && [ ! -f "sites/$SITE/.cloud-ready" ]; then
+  step "drop half-made $SITE"
+  $RUN "cd $BENCH && bench drop-site $SITE --force --no-backup --db-root-password $DB_ROOT_PW" || rm -rf "sites/$SITE"
+fi
 if [ ! -d "sites/$SITE" ]; then
   step "new-site $SITE"
   $RUN "cd $BENCH && bench new-site $SITE --mariadb-root-password $DB_ROOT_PW --admin-password admin"
@@ -138,6 +146,26 @@ if [ ! -d "sites/$SITE" ]; then
   $RUN "cd $BENCH && bench --site $SITE install-app erpnext && bench --site $SITE install-app hrms"
   [ -d apps/newsletter ] && $RUN "cd $BENCH && bench --site $SITE install-app newsletter"
   $RUN "cd $BENCH && bench --site $SITE set-config allow_tests true"
+  # The tests' make_employee takes the first Company and Gender, which only the setup wizard makes.
+  step "setup wizard (company, genders)"
+  cat > /tmp/cloud-setup-wizard.py <<EOF
+import frappe
+from frappe.desk.page.setup_wizard.setup_wizard import setup_complete
+frappe.init(site="$SITE", sites_path=".")
+frappe.connect()
+frappe.set_user("Administrator")
+setup_complete({
+    "language": "English", "country": "Kenya", "timezone": "Africa/Nairobi", "currency": "KES",
+    "full_name": "Test Admin", "email": "admin@test.localhost", "password": "admin",
+    "company_name": "Cloud Test Company", "company_abbr": "CTC", "chart_of_accounts": "Standard",
+    "fy_start_date": "$(date +%Y)-01-01", "fy_end_date": "$(date +%Y)-12-31", "setup_demo": 0,
+})
+frappe.db.commit()
+print("companies:", frappe.db.count("Company"), "genders:", frappe.db.count("Gender"))
+EOF
+  chmod 644 /tmp/cloud-setup-wizard.py
+  $RUN "cd $BENCH/sites && ../env/bin/python /tmp/cloud-setup-wizard.py"
+  touch "sites/$SITE/.cloud-ready"
 fi
 if ! $RUN "cd $BENCH && bench --site $SITE list-apps" | grep -q trident_attendance; then
   step "install trident_attendance"
