@@ -46,7 +46,8 @@ def after_migrate():
 # holds Casual Registrar; someone with Casual Approver approves it (or rejects it) in My HR >
 # Approvals or the ERP, and only then is it Active, which is all the phone's scan finds
 # (api.get_casuals). The workflow runs on the Status field itself. A migrate adds whatever of it
-# is missing (a state row, a transition) and changes nothing an administrator set.
+# is missing (a state row, a transition) and marks the optional states optional; it removes
+# nothing an administrator added.
 #
 # Active, Left and Blacklisted are optional states: Frappe makes a Workflow Action (an item in
 # "Waiting for me", and a push to the phone) only for a step into a state that is not optional,
@@ -123,7 +124,12 @@ def ensure_casual_approval():
 	wf = frappe.get_doc("Workflow", CASUAL_WORKFLOW)
 	have_states = {(d.state, d.allow_edit) for d in wf.states}
 	have_moves = {(d.state, d.action, d.next_state, d.allowed) for d in wf.transitions}
-	added = [wf.append("states", s) for s in states if (s["state"], s["allow_edit"]) not in have_states]
+	optional = {s for s, o in CASUAL_STATES if o}
+	added = [d for d in wf.states if d.state in optional and not d.is_optional_state]
+	for d in added:
+		# Frappe reads the first row of a state: every row of it must say so (no Workflow Action).
+		d.is_optional_state = 1
+	added += [wf.append("states", s) for s in states if (s["state"], s["allow_edit"]) not in have_states]
 	added += [
 		wf.append("transitions", t)
 		for t in transitions
