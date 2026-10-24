@@ -1,43 +1,79 @@
 import frappe
+from frappe.model.workflow import apply_workflow
 from frappe.tests.utils import FrappeTestCase
 
+from trident_attendance import install
+from trident_attendance.api import get_casuals
 from trident_attendance.tests import helpers
 from trident_attendance.trident_attendance.report.casual_attendance import casual_attendance as report
 
 DT = "Casual Labourer"
 
 
-class TestCasualRegistration(FrappeTestCase):
-	"""Whoever marks attendance registers casuals (the web app's Casual labourers page), but never
-	sees or changes their pay."""
+class TestCasualApproval(FrappeTestCase):
+	"""A Casual Registrar registers a casual with their pay; it waits as Pending Approval until a
+	Casual Approver approves it, and only then can the phone find them. Attendance Marking alone
+	no longer registers casuals."""
 
 	def setUp(self):
 		super().setUp()
 		self.addCleanup(helpers.reset)
 		frappe.set_user("Administrator")
+		install.ensure_casual_approval()
+		self.registrar = helpers.make_user(f"registrar@{helpers.TEST_DOMAIN}", roles=("Casual Registrar",)).name
+		self.approver = helpers.make_user(f"approver@{helpers.TEST_DOMAIN}", roles=("Casual Approver",)).name
 		self.marker = helpers.make_user(f"marker@{helpers.TEST_DOMAIN}", roles=("Attendance Marking",)).name
 		self.supplier = frappe.get_doc({"doctype": "Supplier", "supplier_name": "Tok Labour Ltd",
 		                                "supplier_group": frappe.db.get_value("Supplier Group", {}, "name")}
 		                               ).insert(ignore_permissions=True).name
 
-	def test_attendance_marking_registers_and_deactivates_but_no_pay(self):
-		frappe.set_user(self.marker)
-		doc = frappe.get_doc({"doctype": DT, "full_name": "Peter Tok Test", "id_number": "98765432",
-		                      "status": "Active", "subcontractor": self.supplier}).insert()
-		self.assertEqual(doc.subcontractor_name, "Tok Labour Ltd")
-		doc.status = "Left"
-		doc.save()
+	def register(self, id_number="98765432"):
+		frappe.set_user(self.registrar)
+		return frappe.get_doc({"doctype": DT, "full_name": "Peter Tok Test", "id_number": id_number,
+		                       "subcontractor": self.supplier, "daily_rate": 900, "mpesa_number": "254712345678",
+		                       "next_of_kin_name": "Mary Tok Test"}).insert()
+
+	def test_registered_with_pay_waits_for_the_approver(self):
+		doc = self.register()
+		self.assertEqual(doc.status, "Pending Approval")
+		self.assertEqual((doc.daily_rate, doc.mpesa_number, doc.subcontractor_name), (900, "254712345678", "Tok Labour Ltd"))
+		self.assertEqual(get_casuals(id_number="98765432"), [], "the phone does not find a casual not yet approved")
+		with self.assertRaises(frappe.ValidationError):
+			apply_workflow(frappe.get_doc(DT, doc.name), "Approve")          # the registrar may not approve
+		frappe.set_user(self.approver)
+		self.assertEqual(frappe.get_doc(DT, doc.name).daily_rate, 900, "the approver sees the pay")
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Active")
+		frappe.set_user("Administrator")
+		self.assertEqual([c["name"] for c in get_casuals(id_number="98765432")], [doc.name])
+
+	def test_rejected_then_sent_again_deactivated_and_back(self):
+		doc = self.register("11122233")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Reject")
+		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Rejected")
+		frappe.set_user(self.registrar)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Send Again")
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		frappe.set_user(self.registrar)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Deactivate")
 		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Left")
-		self.assertFalse(frappe.has_permission(DT, "delete", doc))
+		apply_workflow(frappe.get_doc(DT, doc.name), "Reactivate")
+		self.assertEqual(frappe.db.get_value(DT, doc.name, "status"), "Active")
+
+	def test_attendance_marking_no_longer_registers_and_never_sees_pay(self):
+		frappe.set_user(self.marker)
+		self.assertFalse(frappe.has_permission(DT, "create"))
+		self.assertTrue(frappe.has_permission("Casual Checkin", "read"))
+		self.assertFalse(frappe.has_permission("Casual Checkin", "create"))
 		meta = frappe.get_meta(DT)
 		for f in ("daily_rate", "mpesa_number", "bank_name", "bank_account_no"):
 			self.assertEqual(meta.get_field(f).permlevel, 1, f)
-		self.assertNotIn(1, meta.get_permlevel_access("read", user=self.marker))
 
-	def test_attendance_marking_reads_casual_checkins_only(self):
-		frappe.set_user(self.marker)
-		self.assertTrue(frappe.has_permission("Casual Checkin", "read"))
-		self.assertFalse(frappe.has_permission("Casual Checkin", "create"))
+	def test_the_workflow_is_made_once(self):
+		self.assertTrue(frappe.db.exists("Workflow", install.CASUAL_WORKFLOW))
+		self.assertFalse(install.ensure_casual_approval(), "a second run changes nothing")
 
 
 class TestCasualAttendance(FrappeTestCase):
@@ -47,8 +83,10 @@ class TestCasualAttendance(FrappeTestCase):
 		super().setUp()
 		self.addCleanup(helpers.reset)
 		frappe.set_user("Administrator")
-		self.casual = frappe.get_doc({"doctype": DT, "full_name": "Mary Tok Test", "id_number": "11223344",
-		                              "status": "Active"}).insert(ignore_permissions=True).name
+		doc = frappe.get_doc({"doctype": DT, "full_name": "Mary Tok Test", "id_number": "11223344"})
+		doc.flags.ignore_permissions = True
+		doc.insert()
+		self.casual = doc.name
 
 	def punch(self, log_type, time):
 		frappe.get_doc({"doctype": "Casual Checkin", "casual_labourer": self.casual, "log_type": log_type,
