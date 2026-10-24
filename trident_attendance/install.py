@@ -31,10 +31,80 @@ PERM_FIELDS = (
 def after_install():
 	ensure_standard_perms()
 	adopt_site_id_field()
+	ensure_casual_approval()
 
 
 def after_migrate():
 	ensure_standard_perms()
+	ensure_casual_approval()
+
+
+# ---------------------------------------------------------------------------
+# Casual labourers: registered by one role, approved by another
+# ---------------------------------------------------------------------------
+# The web app's Casual labourers page creates a Casual Labourer as "Pending Approval" for whoever
+# holds Casual Registrar; someone with Casual Approver approves it (or rejects it) in My HR >
+# Approvals or the ERP, and only then is it Active, which is all the phone's scan finds
+# (api.get_casuals). The workflow runs on the Status field itself. It is made only when missing:
+# an administrator may change it afterwards and a migrate leaves it alone.
+
+CASUAL_ROLES = ("Casual Registrar", "Casual Approver")
+CASUAL_WORKFLOW = "Casual Labourer Approval"
+CASUAL_STATES = (
+	# state, who may edit a casual in it
+	("Pending Approval", "Casual Registrar"),
+	("Active", "Casual Registrar"),
+	("Rejected", "Casual Registrar"),
+	("Left", "Casual Registrar"),
+)
+CASUAL_TRANSITIONS = (
+	# from, action, to, role, self approval
+	("Pending Approval", "Approve", "Active", "Casual Approver", 0),
+	("Pending Approval", "Reject", "Rejected", "Casual Approver", 0),
+	("Rejected", "Send Again", "Pending Approval", "Casual Registrar", 1),
+	("Active", "Deactivate", "Left", "Casual Registrar", 1),
+	("Active", "Deactivate", "Left", "Casual Approver", 1),
+	("Left", "Reactivate", "Active", "Casual Registrar", 1),
+	("Left", "Reactivate", "Active", "Casual Approver", 1),
+)
+
+
+def ensure_casual_approval():
+	"""The two roles, the workflow's states and actions, and the workflow itself, each only when
+	missing. Safe to run repeatedly."""
+	if not frappe.db.exists("DocType", "Casual Labourer"):
+		return False
+	for role in CASUAL_ROLES:
+		if not frappe.db.exists("Role", role):
+			frappe.get_doc({"doctype": "Role", "role_name": role, "desk_access": 1}).insert(ignore_permissions=True)
+	for state, _ in CASUAL_STATES:
+		if not frappe.db.exists("Workflow State", state):
+			frappe.get_doc({"doctype": "Workflow State", "workflow_state_name": state}).insert(ignore_permissions=True)
+	for action in {t[1] for t in CASUAL_TRANSITIONS}:
+		if not frappe.db.exists("Workflow Action Master", action):
+			frappe.get_doc({"doctype": "Workflow Action Master", "workflow_action_name": action}).insert(
+				ignore_permissions=True
+			)
+	if frappe.db.exists("Workflow", CASUAL_WORKFLOW):
+		return False
+	wf = frappe.get_doc(
+		{
+			"doctype": "Workflow",
+			"workflow_name": CASUAL_WORKFLOW,
+			"document_type": "Casual Labourer",
+			"workflow_state_field": "status",
+			"is_active": 1,
+			"send_email_alert": 0,
+			"states": [{"state": s, "doc_status": "0", "allow_edit": role} for s, role in CASUAL_STATES],
+			"transitions": [
+				{"state": a, "action": act, "next_state": b, "allowed": role, "allow_self_approval": own}
+				for a, act, b, role, own in CASUAL_TRANSITIONS
+			],
+		}
+	)
+	wf.insert(ignore_permissions=True)
+	frappe.logger("trident_attendance").info(f"Workflow {CASUAL_WORKFLOW} made")
+	return True
 
 
 # Where a site that predates this app is likely to keep the national ID number, in the order

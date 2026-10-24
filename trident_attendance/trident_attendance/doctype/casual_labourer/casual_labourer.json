@@ -77,13 +77,13 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "Active",
+   "default": "Pending Approval",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Active\nLeft\nBlacklisted",
+   "options": "Pending Approval\nActive\nRejected\nLeft\nBlacklisted",
    "reqd": 1
   },
   {
@@ -242,7 +242,7 @@
  "image_field": "photo",
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-10-24 10:00:00.000000",
+ "modified": "2026-10-24 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Casual Labourer",
@@ -294,16 +294,6 @@
    "write": 1
   },
   {
-   "create": 1,
-   "email": 0,
-   "export": 0,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Attendance Marking",
-   "write": 1
-  },
-  {
    "permlevel": 1,
    "read": 1,
    "role": "System Manager",
@@ -325,6 +315,34 @@
    "permlevel": 1,
    "read": 1,
    "role": "Attendance Admin",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Casual Registrar",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Casual Registrar",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Casual Approver",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Casual Approver",
    "write": 1
   }
  ],
