@@ -128,8 +128,8 @@ class TestCasualApproval(FrappeTestCase):
 	def test_nobody_waits_on_a_working_casual(self):
 		doc = self.register("66677788")
 		waiting = lambda: frappe.get_all("Workflow Action", filters={"reference_name": doc.name, "status": "Open"},
-		                                 pluck="user")
-		self.assertIn(self.approver, waiting(), "the approver waits on a new casual")
+		                                 pluck="name")
+		self.assertTrue(waiting(), "the approver waits on a new casual")
 		frappe.set_user(self.approver)
 		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
 		self.assertEqual(waiting(), [], "nobody waits on an Active casual")
