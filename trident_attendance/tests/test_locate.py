@@ -497,6 +497,7 @@ class TestLocationAnswer(LocateCase):
 
 	def test_nothing_of_the_position_is_kept(self):
 		before = frappe.get_all(REQUEST_DOCTYPE, fields=["*"])
+		logged = set(frappe.get_all("Error Log", pluck="name"))     # whatever earlier tests left there
 		self.answer(FakeWeb(self.employee_a, [position(AWAY)]))
 		self.assertEqual(frappe.get_all(REQUEST_DOCTYPE, fields=["*"]), before)
-		self.assertEqual(frappe.get_all("Error Log", filters={"creation": [">", now_datetime() - timedelta(minutes=1)]}), [])
+		self.assertEqual(set(frappe.get_all("Error Log", pluck="name")) - logged, set())
