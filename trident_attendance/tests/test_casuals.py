@@ -96,7 +96,7 @@ class TestCasualApproval(FrappeTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			frappe.get_doc("File", face.name).delete()
 		moved = frappe.get_doc("File", face.name)
-		moved.attached_to_name = None
+		moved.attached_to_doctype, moved.attached_to_name = "User", "Administrator"     # off the casual
 		with self.assertRaises(frappe.PermissionError):
 			moved.save()
 		frappe.set_user("Administrator")
