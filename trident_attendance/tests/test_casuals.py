@@ -79,6 +79,26 @@ class TestCasualApproval(FrappeTestCase):
 			frappe.get_doc({"doctype": "File", "file_name": "swap.jpg", "content": b"\xff\xd8\xff",
 			                "attached_to_doctype": DT, "attached_to_name": doc.name, "attached_to_field": "photo",
 			                "is_private": 1}).insert()
+
+	def test_an_approved_casuals_photo_file_is_not_deleted_or_replaced(self):
+		doc = self.register("55566677")
+		face = frappe.get_doc({"doctype": "File", "file_name": "tok-face.jpg", "content": b"\xff\xd8\xff\xe0face",
+		                       "attached_to_doctype": DT, "attached_to_name": doc.name, "attached_to_field": "photo",
+		                       "is_private": 1}).insert()
+		mine = frappe.get_doc(DT, doc.name)
+		mine.photo = face.file_url
+		mine.save()
+		frappe.set_user(self.approver)
+		apply_workflow(frappe.get_doc(DT, doc.name), "Approve")
+		frappe.set_user(self.registrar)
+		with self.assertRaises(frappe.PermissionError):
+			frappe.get_doc("File", face.name).delete()
+		moved = frappe.get_doc("File", face.name)
+		moved.attached_to_name = None
+		with self.assertRaises(frappe.PermissionError):
+			moved.save()
+		frappe.set_user("Administrator")
+		self.assertTrue(frappe.db.exists("File", face.name))
 		frappe.set_user(self.approver)
 		theirs = frappe.get_doc(DT, doc.name)
 		theirs.daily_rate = 1000
