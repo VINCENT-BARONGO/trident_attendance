@@ -81,6 +81,11 @@ class TestCasualApproval(FrappeTestCase):
 			frappe.get_doc({"doctype": "File", "file_name": "swap.jpg", "content": helpers.JPEG,
 			                "attached_to_doctype": DT, "attached_to_name": doc.name, "attached_to_field": "photo",
 			                "is_private": 1}).insert()
+		frappe.set_user(self.approver)
+		theirs = frappe.get_doc(DT, doc.name)
+		theirs.daily_rate = 1000
+		theirs.save()
+		self.assertEqual(frappe.db.get_value(DT, doc.name, ["daily_rate", "next_of_kin_name"]), (1000, "Jane Tok Test"))
 
 	def test_an_approved_casuals_photo_file_is_not_deleted_or_replaced(self):
 		doc = self.register("55566677")
@@ -101,11 +106,6 @@ class TestCasualApproval(FrappeTestCase):
 			moved.save()
 		frappe.set_user("Administrator")
 		self.assertTrue(frappe.db.exists("File", face.name))
-		frappe.set_user(self.approver)
-		theirs = frappe.get_doc(DT, doc.name)
-		theirs.daily_rate = 1000
-		theirs.save()
-		self.assertEqual(frappe.db.get_value(DT, doc.name, ["daily_rate", "next_of_kin_name"]), (1000, "Jane Tok Test"))
 
 	def test_attendance_marking_no_longer_registers_and_never_sees_pay(self):
 		frappe.set_user(self.marker)
