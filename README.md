@@ -474,6 +474,29 @@ field holds a Traccar API token). The ERP server must reach both Traccar and Ope
 Do not switch on Traccar's own geocoder with OpenStreetMap: it would look up every position
 of every phone, which OpenStreetMap's public geocoder does not allow.
 
+### Clearing a stale review queue
+
+The hourly run looks back `LOOKBACK_DAYS` (45) and holds a punch whose day already has an
+Attendance as *Attendance already marked* for good, so a site that marked attendance by hand
+before the app, or imported old check-ins, keeps them in Pending Review forever.
+`trident_attendance.maintenance.close_stale_reviews` (System Manager) clears the ones nobody
+will act on, among check-ins before `before` (default: a week ago):
+
+- a punch whose work day has a submitted **Present / Half Day / Work From Home** Attendance is
+  linked to it and **Marked**. Cancelling that Attendance puts it back in review, as for any
+  punch the app marked;
+- a punch with **no hold reason** older than the look-back (imported before the app) is
+  **Rejected** with a clean-up reason.
+
+Anything else (Missing OUT, geofence, Absent or On Leave days with punches) stays for a
+reviewer. It is a dry run unless `apply` is set; `employee` limits it to one person. Every
+reason it writes says *clean-up*, and `reopen_closed_reviews` puts all of them back:
+
+```js
+frappe.call({method: "trident_attendance.maintenance.close_stale_reviews", args: {apply: 0}})
+frappe.call({method: "trident_attendance.maintenance.reopen_closed_reviews", args: {apply: 0}})
+```
+
 ### Site requirements
 
 - `System Settings > Time Zone` must be `Africa/Nairobi` (the app posts handset-local
