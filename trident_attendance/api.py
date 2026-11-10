@@ -333,29 +333,46 @@ def get_employee_photo(employee):
 def _serve_photo(doctype, name, field):
 	"""Sends `doctype`.`field` (a private file, possibly in External Storage) as the response.
 	The caller has already checked the role; see get_employee_photo for why the read runs as
-	Administrator."""
+	Administrator.
+
+	The bytes are cached in Redis, keyed by the File and its content hash, because the phone asks
+	for this photo before every self-punch: a whole site clocking in within a few minutes would
+	otherwise read the same picture out of external storage (an S3 round trip through the web
+	worker) once per request, and under that burst the reads queue and the phone times out with
+	"could not be fetched". The first request fills the cache; the rest are served from it. The
+	content hash is in the key, so a replaced photo is served fresh with nothing to clear, and a
+	short TTL bounds how long a deleted one could linger."""
 	name = str(name or "").strip()
 	image = frappe.db.get_value(doctype, name, field) if name else None
 	if not image:
 		raise frappe.DoesNotExistError(_("No photo on {0} {1}.").format(doctype, name))
 
-	file_name = frappe.db.get_value(
+	row = frappe.db.get_value(
 		"File",
 		{"file_url": image, "attached_to_doctype": doctype, "attached_to_name": name},
-		"name",
-	) or frappe.db.get_value("File", {"file_url": image}, "name")
-	if not file_name:
+		["name", "file_name", "content_hash"],
+		as_dict=True,
+	) or frappe.db.get_value("File", {"file_url": image}, ["name", "file_name", "content_hash"], as_dict=True)
+	if not row:
 		raise frappe.DoesNotExistError(_("The photo file of {0} {1} is missing.").format(doctype, name))
 
-	caller = frappe.session.user
-	try:
-		frappe.set_user("Administrator")
-		file = frappe.get_doc("File", file_name)
-		content = file.get_content()
-	finally:
-		frappe.set_user(caller)
+	cache_key = f"self_photo:{row.name}:{row.content_hash or ''}"
+	filename = row.file_name or f"{name}.jpg"
+	content = frappe.cache().get_value(cache_key)
+	if content is None:
+		caller = frappe.session.user
+		try:
+			frappe.set_user("Administrator")
+			file = frappe.get_doc("File", row.name)
+			content = file.get_content()
+			filename = file.file_name or filename
+		finally:
+			frappe.set_user(caller)
+		# Only image bytes are cached; get_content decodes text files to str, which we never serve here.
+		if isinstance(content, bytes):
+			frappe.cache().set_value(cache_key, content, expires_in_sec=3600)
 
-	frappe.local.response.filename = file.file_name or f"{name}.jpg"
+	frappe.local.response.filename = filename
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
 
