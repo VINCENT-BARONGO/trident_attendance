@@ -1019,8 +1019,29 @@ class TestWaitingForSomeone(TriggerCase):
 		with (
 			patch("trident_attendance.push_hooks.get_workflow_name", return_value="Tok Flow"),
 			patch("trident_attendance.push_hooks.frappe.get_doc", side_effect=lambda doctype, *a, **k: flow if doctype == "Workflow" else doc),
+			patch("trident_attendance.push_hooks._can_read", return_value=True),
 		):
 			self.assertEqual(push_hooks._those_who_may_act({self.user_a, self.user_b}, "Employee", self.employee_a), {self.user_b})
+
+	def test_those_who_may_not_read_the_document_are_not_told(self):
+		"""A role with a step (Recall for every Projects User) on a document the person cannot
+		read: no push, since the page would only say ERPNext does not allow them to read it."""
+		flow = self.flow(dict(state="Pending Approval", action="Recall", allowed="Employee Self Service", allow_self_approval=1, condition=None))
+		doc = self.waiting()
+		with (
+			patch("trident_attendance.push_hooks.get_workflow_name", return_value="Tok Flow"),
+			patch("trident_attendance.push_hooks.frappe.get_doc", side_effect=lambda doctype, *a, **k: flow if doctype == "Workflow" else doc),
+			patch("trident_attendance.push_hooks._can_read", side_effect=lambda user, d: user == self.user_b),
+		):
+			self.assertEqual(push_hooks._those_who_may_act({self.user_a, self.user_b}, "Employee", self.employee_a), {self.user_b})
+
+	def test_can_read_is_the_erp_read_permission_for_that_person(self):
+		doc = self.waiting()
+		with patch("trident_attendance.push_hooks.frappe.has_permission", return_value=False) as asked:
+			self.assertFalse(push_hooks._can_read(self.user_b, doc))
+		asked.assert_called_once_with("Employee", "read", doc=doc, user=self.user_b)
+		with patch("trident_attendance.push_hooks.frappe.has_permission", return_value=True):
+			self.assertTrue(push_hooks._can_read(self.user_b, doc))
 
 	def test_a_closed_workflow_step_or_an_unheld_role_sends_nothing(self):
 		doc = frappe._dict(doctype="Workflow Action", status="Completed", user=None, permitted_roles=[frappe._dict(role="Employee Self Service")], reference_doctype="Purchase Order", reference_name="PO-0001", workflow_state="Approved")
