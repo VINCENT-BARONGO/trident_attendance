@@ -145,11 +145,19 @@ def _may_act(user, doc, workflow) -> bool:
 	return False
 
 
+def _can_read(user, doc) -> bool:
+	"""Whether `user` may open `doc` in the ERP. A step open to a role on a document the person
+	cannot read only ends on "ERPNext does not allow you to read" in My HR (a Projects User has
+	Recall on project Delivery Notes, but a Safety Officer with that role reads no Delivery Note)."""
+	return bool(frappe.has_permission(doc.doctype, "read", doc=doc, user=user))
+
+
 def _those_who_may_act(users, doctype, name) -> set:
 	"""Of `users`, who hold a role the workflow step names, those with an action on the
 	document itself: a step open to "Leave Supervisor" on the condition that they are the
 	approver named on the leave is told to that one person, not to every supervisor. Someone
-	whose answer cannot be worked out is still told, as before this check existed."""
+	who may not read the document is not told: they could not open it. Someone whose answer
+	cannot be worked out is still told, as before this check existed."""
 	workflow_name = get_workflow_name(doctype)
 	if not workflow_name or not frappe.db.exists(doctype, name):
 		return set(users)
@@ -158,7 +166,7 @@ def _those_who_may_act(users, doctype, name) -> set:
 	may = set()
 	for user in users:
 		try:
-			if _may_act(user, doc, workflow):
+			if _may_act(user, doc, workflow) and _can_read(user, doc):
 				may.add(user)
 		except Exception:
 			may.add(user)
