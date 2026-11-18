@@ -28,7 +28,14 @@ frappe.query_reports["Casual Attendance"] = {
 		// The weekly attendance & pay register as a landscape PDF (the same sheet My HR downloads):
 		// sites -> P/A grid -> phone/ID/rate/pay, with site and grand totals. Scoped to the caller
 		// (HR/admin: every site; a coordinator: the sites they are assigned to). Uses the report's
-		// To Date to choose the Mon-Sat week.
+		// To Date to choose the Mon-Sat week. The register shows pay, so only roles ERPNext lets read
+		// a casual's pay see the button (the server gate refuses anyone else); Attendance Marking,
+		// who can open this daily report but not read Casual Labourer, is excluded.
+		const pay_roles = ["System Manager", "HR Manager", "HR User", "Attendance Admin",
+			"Casual Registrar", "Casual Approver"];
+		if (!pay_roles.some((r) => (frappe.user_roles || []).includes(r))) {
+			return;
+		}
 		report.page.add_inner_button(__("Download weekly register (PDF)"), () => {
 			const week = report.get_filter_value("to_date") || frappe.datetime.get_today();
 			const url =

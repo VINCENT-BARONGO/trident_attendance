@@ -31,8 +31,11 @@ WEEK_DAYS = 6  # Monday .. Saturday
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 FULL_ROLES = {"System Manager", "HR Manager", "HR User", "Attendance Admin"}
-# Everyone allowed to pull the register at all; the roles above see the whole company, the rest are scoped.
-ALLOWED_ROLES = FULL_ROLES | {"Casual Registrar", "Casual Approver", "Attendance Marking"}
+# Everyone allowed to pull the register at all; the roles above see the whole company, the rest are
+# scoped to their sites. The register shows pay (daily rate, amount), so every role here must be one
+# ERPNext lets read Casual Labourer's pay (its permlevel-1 DocPerms): Attendance Marking, which may
+# mark attendance but not read a casual's record, is deliberately NOT included.
+ALLOWED_ROLES = FULL_ROLES | {"Casual Registrar", "Casual Approver"}
 
 
 def monday_of(d: date) -> date:
