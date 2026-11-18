@@ -4,6 +4,7 @@ coordinator sees only the sites they are assigned to (Project.allowed_users) plu
 clocked in (supervisor_user). Then the P/A grid, days present and pay, and the role gate."""
 
 from datetime import date
+from decimal import Decimal
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
