@@ -23,10 +23,11 @@ from frappe import _
 from frappe.utils import getdate
 from frappe.utils.pdf import get_pdf
 
+from trident_attendance import utils
+
 CHECKIN = "Casual Checkin"
 LABOURER = "Casual Labourer"
 PROJECT = "Project"
-PROJECT_USER = "Project Allowed User"  # Project.allowed_users child table: the sites a user is assigned to
 WEEK_DAYS = 6  # Monday .. Saturday
 DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
@@ -89,26 +90,17 @@ def _has_full(user: str) -> bool:
 	return bool(FULL_ROLES & set(frappe.get_roles(user)))
 
 
-def _allowed_projects(user: str) -> list[str]:
-	"""The sites `user` is assigned to: Projects whose allowed_users (Project Allowed User) include
-	them. Empty when the query cannot run — the register then falls back to their own punches only."""
-	try:
-		return frappe.get_all(
-			PROJECT, filters=[[PROJECT_USER, "user", "=", user]], pluck="name", limit_page_length=0
-		)
-	except Exception:  # noqa: BLE001
-		return []
-
-
 def _punches(user: str, start: date, sat_end: date, *, full: bool) -> list[dict]:
 	"""Every punch in [start, sat_end) for the user's scope — any log_type, so a single clock-in
 	(even a lone OUT) marks the casual present that day. Row permissions are ignored and the scope is
-	the window AND (a site the user is assigned to OR a casual they clocked in), unless `full`."""
+	the window AND (a site the user is assigned to OR a casual they clocked in), unless `full`. The
+	assigned sites come from utils.assigned_projects (Project > Allowed Users, or the standard
+	Project > Users), so it matches the rest of the app and works where the custom table is absent."""
 	filters = [["time", ">=", f"{start} 00:00:00"], ["time", "<", f"{sat_end} 00:00:00"]]
 	or_filters = None
 	if not full:
 		or_filters = [["supervisor_user", "=", user]]
-		projects = _allowed_projects(user)
+		projects = list(utils.assigned_projects(user))
 		if projects:
 			or_filters.append(["project", "in", projects])
 	return frappe.get_all(

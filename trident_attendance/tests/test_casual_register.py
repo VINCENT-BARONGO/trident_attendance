@@ -44,8 +44,11 @@ class TestCasualRegister(FrappeTestCase):
 		self._punch(self.c1, self.pa, "IN", _day(15), self.other)  # Sunday -> excluded
 
 	def _project(self, name, allowed):
+		# Assign via the standard Project > Users table, which exists in every bench. The live site
+		# also has a custom "Project Allowed User" table; utils.assigned_projects reads whichever is
+		# present, so the register scopes the same way here as in production.
 		doc = frappe.get_doc({"doctype": "Project", "project_name": name, "company": self.company,
-		                      "allowed_users": [{"user": u} for u in allowed]})
+		                      "users": [{"user": u} for u in allowed]})
 		return doc.insert(ignore_permissions=True).name
 
 	def _casual(self, full_name, id_number, rate):
