@@ -33,6 +33,8 @@ DOCTYPES = {
 	"Tender": "trident_attendance/trident_attendance/doctype/tender/tender.json",
 	"Payment Certificate Follow Up": "trident_attendance/trident_attendance/doctype/payment_certificate_follow_up/payment_certificate_follow_up.json",
 	"Payment Certificate": "trident_attendance/trident_attendance/doctype/payment_certificate/payment_certificate.json",
+	"Project Agreement": "trident_attendance/trident_attendance/doctype/project_agreement/project_agreement.json",
+	"Project Variation": "trident_attendance/trident_attendance/doctype/project_variation/project_variation.json",
 }
 # Custom fields the tests need, from the fixture; dropped afterwards when the site lacked them.
 FIELDS = [

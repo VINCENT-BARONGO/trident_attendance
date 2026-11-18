@@ -175,3 +175,115 @@ class TestPaymentCertificate(FrappeTestCase):
 		self.assertEqual([(r["valuation_no"], r["days_overdue"]) for r in rows], [(1, 10), (2, 0)])
 		_cols, rows = retention_due.execute({"project": self.project, "show_all": 1})
 		self.assertEqual(len(rows), 4)
+
+
+SIGNED = dict(signed_on=TODAY, agreement_document="/files/tok-agreement.pdf", payment_terms="Monthly valuations, 30 days, 10% retention",
+              tax_compliance_checked=1, nca_registration_checked=1, insurance_checked=1, bond_checked=1)
+
+
+def make_agreement(project, **fields):
+	doc = {"doctype": "Project Agreement", "project": project, "agreement_type": "Main Contract", "company": company(),
+	       "work_start_date": add_days(TODAY, 7)}
+	doc.update(fields)
+	return frappe.get_doc(doc).insert(ignore_permissions=True)
+
+
+def make_variation(project, **fields):
+	doc = {"doctype": "Project Variation", "project": project, "variation_no": 1, "description": "Extra floor drains",
+	       "instructed_on": add_days(TODAY, -10), "company": company()}
+	doc.update(fields)
+	return frappe.get_doc(doc).insert(ignore_permissions=True)
+
+
+class TestProjectAgreement(FrappeTestCase):
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(helpers.reset)
+		frappe.set_user("Administrator")
+		helpers.set_settings(track_project_agreements=0)
+		self.project = make_project().name
+
+	def test_an_agreement_is_complete_only_with_signature_copy_terms_and_all_checks(self):
+		agreement = make_agreement(self.project)
+		self.assertEqual((agreement.status, agreement.complete, agreement.in_time), ("Not Signed", 0, 0))
+		agreement.update({**SIGNED, "bond_checked": 0})
+		agreement.save()
+		self.assertEqual((agreement.status, agreement.complete), ("Signed, Incomplete", 0))
+		agreement.bond_checked = 1
+		agreement.save()
+		self.assertEqual((agreement.status, agreement.complete, agreement.in_time), ("Complete", 1, 1))
+		self.assertEqual(str(agreement.completed_on), TODAY)
+
+	def test_completed_after_work_started_is_not_in_time_and_cannot_be_back_dated(self):
+		agreement = make_agreement(self.project, work_start_date=add_days(TODAY, -3), **SIGNED)
+		self.assertEqual((agreement.complete, agreement.in_time), (1, 0))
+		agreement.completed_on = add_days(TODAY, -30)                                # typed in by hand, or sent by an API call
+		agreement.save()
+		self.assertEqual((str(agreement.completed_on), agreement.in_time), (TODAY, 0))
+
+	def test_one_main_contract_per_project_but_any_number_of_subcontracts(self):
+		make_agreement(self.project)
+		with self.assertRaises(frappe.ValidationError):
+			make_agreement(self.project)
+		make_agreement(self.project, agreement_type="Subcontract", party_name="Tok Insulation")
+		make_agreement(self.project, agreement_type="Subcontract", party_name="Tok Scaffolds")
+		with self.assertRaises(frappe.ValidationError):                              # signed in the future
+			make_agreement(self.project, agreement_type="Subcontract", signed_on=add_days(TODAY, 1))
+
+	def test_a_new_project_gets_its_agreement_only_where_the_site_asks_for_it(self):
+		self.assertFalse(frappe.db.exists("Project Agreement", {"project": self.project}))       # switched off in setUp
+		helpers.set_settings(track_project_agreements=1)
+		project = make_project("Tok Heights").name
+		made = frappe.get_all("Project Agreement", filters={"project": project}, fields=["agreement_type", "status", "auto_created"])
+		self.assertEqual([(a.agreement_type, a.status, a.auto_created) for a in made], [("Main Contract", "Not Signed", 1)])
+
+
+class TestProjectVariation(FrappeTestCase):
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(helpers.reset)
+		frappe.set_user("Administrator")
+		helpers.set_settings(track_project_agreements=0)
+		self.project = make_project().name
+
+	def test_a_variation_moves_from_raised_to_priced_to_approved_to_claimed(self):
+		variation = make_variation(self.project)
+		self.assertEqual((variation.status, variation.days_to_price), ("Raised", None))
+		variation.update({"priced_on": add_days(TODAY, -6), "amount_priced": 250_000})
+		variation.save()
+		self.assertEqual((variation.status, variation.days_to_price, variation.priced_by), ("Priced", 4, "Administrator"))
+		variation.update({"approved_on": add_days(TODAY, -1), "amount_approved": 200_000})
+		variation.save()
+		self.assertEqual(variation.status, "Approved")
+		valuation = make_certificate(self.project)
+		variation.payment_certificate = valuation.name
+		variation.save()
+		self.assertEqual(variation.status, "Invoiced")
+
+	def test_dates_and_amounts_are_kept_honest(self):
+		with self.assertRaises(frappe.ValidationError):                              # instructed in the future
+			make_variation(self.project, instructed_on=add_days(TODAY, 1))
+		with self.assertRaises(frappe.ValidationError):                              # priced before it was instructed
+			make_variation(self.project, priced_on=add_days(TODAY, -20), amount_priced=1)
+		with self.assertRaises(frappe.ValidationError):                              # priced with no amount
+			make_variation(self.project, priced_on=add_days(TODAY, -2))
+		with self.assertRaises(frappe.ValidationError):                              # approved before it was priced
+			make_variation(self.project, approved_on=add_days(TODAY, -1), amount_approved=1)
+		make_variation(self.project)
+		with self.assertRaises(frappe.ValidationError):                              # the same variation twice
+			make_variation(self.project)
+		other = make_certificate(make_project("Tok Plaza").name)
+		with self.assertRaises(frappe.ValidationError):                              # claimed on another project's valuation
+			make_variation(self.project, variation_no=2, payment_certificate=other.name)
+
+
+class TestTenderPricing(FrappeTestCase):
+	def setUp(self):
+		super().setUp()
+		self.addCleanup(helpers.reset)
+		frappe.set_user("Administrator")
+
+	def test_the_margin_is_worked_out_from_the_cost_estimate(self):
+		tender = make_tender(tender_value=50_000_000, estimated_cost=40_000_000)
+		self.assertEqual((tender.margin_percent, tender.priced_by), (20.0, "Administrator"))
+		self.assertIsNone(make_tender(tender_name="No estimate yet").margin_percent)

@@ -18,6 +18,7 @@ class Tender(Document):
 			self.company = frappe.defaults.get_user_default("Company") or frappe.db.get_value("Company", {}, "name")
 		self._check_submission()
 		self._check_result()
+		self._set_margin()
 
 	def _check_submission(self):
 		if self.status in SENT and not self.submitted_on:
@@ -40,3 +41,13 @@ class Tender(Document):
 			self.result_date = nowdate()
 		if self.status in ("Lost", "Not Submitted") and not (self.reason or "").strip():
 			frappe.msgprint(_("Add the reason: it is what the next tender is priced from."), alert=True)
+
+	def _set_margin(self):
+		"""What the tender price leaves over the estimated cost, as a share of the price."""
+		if self.estimated_cost and self.tender_value:
+			self.margin_percent = round(100 * (self.tender_value - self.estimated_cost) / self.tender_value, 2)
+			if not self.priced_by:
+				self.priced_by = frappe.session.user
+		else:
+			self.margin_percent = None
+
