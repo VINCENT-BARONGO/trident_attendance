@@ -91,8 +91,9 @@ class TestCasualRegister(FrappeTestCase):
 		peter = next(c for c in sites[self.pa]["casuals"] if c["name"] == self.c1)
 		self.assertEqual(peter["present"], [True, True, False, False, False, False])  # Mon/Tue, not Sun
 		self.assertEqual(peter["days"], 2)
-		self.assertEqual(str(peter["rate"]), "800")
-		self.assertEqual(str(peter["amount"]), "1600")
+		# ERPNext stores daily_rate as a float, so the Decimal may carry a trailing .0; compare by value.
+		self.assertEqual(peter["rate"], Decimal("800"))        # rate x days present
+		self.assertEqual(peter["amount"], Decimal("1600"))
 		self.assertEqual(peter["phone"], "254700111222")
 
 	def test_week_parsing_defaults_and_clamps(self):
