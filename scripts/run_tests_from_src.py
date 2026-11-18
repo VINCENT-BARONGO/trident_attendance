@@ -73,6 +73,7 @@ TESTS = [
 	"trident_attendance.tests.test_self_clock_in",
 	"trident_attendance.tests.test_access_hardening",
 	"trident_attendance.tests.test_maintenance",
+	"trident_attendance.tests.test_error_summary",
 ]
 
 
