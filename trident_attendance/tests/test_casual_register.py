@@ -23,6 +23,11 @@ class TestCasualRegister(FrappeTestCase):
 	def setUp(self):
 		super().setUp()
 		self.addCleanup(helpers.reset)
+		# Adding users to a Project makes ERPNext try to email them a welcome; the test site has no
+		# outgoing Email Account, so mute email for the test (restored after).
+		muted = frappe.flags.mute_emails
+		frappe.flags.mute_emails = True
+		self.addCleanup(lambda: setattr(frappe.flags, "mute_emails", muted))
 		frappe.set_user("Administrator")
 		self.company = frappe.db.get_value("Company", {}, "name")
 		self.coord = helpers.make_user(f"coord@{helpers.TEST_DOMAIN}", roles=("Casual Registrar",)).name
@@ -48,7 +53,8 @@ class TestCasualRegister(FrappeTestCase):
 		# also has a custom "Project Allowed User" table; utils.assigned_projects reads whichever is
 		# present, so the register scopes the same way here as in production.
 		doc = frappe.get_doc({"doctype": "Project", "project_name": name, "company": self.company,
-		                      "users": [{"user": u} for u in allowed]})
+		                      "send_welcome_email": 0,
+		                      "users": [{"user": u, "welcome_email_sent": 1} for u in allowed]})
 		return doc.insert(ignore_permissions=True).name
 
 	def _casual(self, full_name, id_number, rate):
