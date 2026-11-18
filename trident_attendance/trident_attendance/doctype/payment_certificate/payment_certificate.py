@@ -122,6 +122,8 @@ def on_invoice_submit(doc, method=None):
 	cert.sales_invoice = doc.name
 	cert.invoiced_on = doc.posting_date
 	cert.flags.ignore_permissions = True
+	# The link is to the invoice being submitted in this same request: it need not be looked up again.
+	cert.flags.ignore_links = True
 	cert.save()
 
 
