@@ -120,6 +120,11 @@ doc_events = {
 	"Workflow Action": {
 		"after_insert": "trident_attendance.push_hooks.workflow_action_after_insert",
 	},
+	# A new project gets its unsigned main contract agreement, where the site asks for it (Settings >
+	# Projects), so that work started without a signed agreement shows up.
+	"Project": {
+		"after_insert": "trident_attendance.trident_attendance.doctype.project_agreement.project_agreement.on_project_insert",
+	},
 	# A project valuation's invoice names the client's Payment Certificate; submitting it stamps the
 	# invoice and its date on the certificate, which is what the invoicing KRA is scored from.
 	"Sales Invoice": {

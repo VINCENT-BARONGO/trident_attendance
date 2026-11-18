@@ -17,6 +17,11 @@
   "tender_value",
   "company",
   "prepared_by",
+  "pricing_section",
+  "estimated_cost",
+  "priced_by",
+  "column_break_pricing",
+  "margin_percent",
   "dates_section",
   "closing_date",
   "submitted_on",
@@ -97,6 +102,36 @@
    "options": "User",
    "in_standard_filter": 1,
    "description": "Who the tender is counted for. Defaults to whoever records it."
+  },
+  {
+   "fieldname": "pricing_section",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "non_negative": 1,
+   "options": "Company:company:default_currency",
+   "description": "What the Quantity Surveyor estimates the work will cost the company, before margin. Entered before the tender is submitted."
+  },
+  {
+   "fieldname": "priced_by",
+   "fieldtype": "Link",
+   "label": "Priced By",
+   "options": "User",
+   "description": "Who prepared the cost estimate."
+  },
+  {
+   "fieldname": "column_break_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "margin_percent",
+   "fieldtype": "Percent",
+   "label": "Margin on Tender Value",
+   "read_only": 1
   },
   {
    "fieldname": "dates_section",
@@ -201,7 +236,7 @@
  "index_web_pages_for_search": 0,
  "istable": 0,
  "links": [],
- "modified": "2026-11-18 12:00:00.000000",
+ "modified": "2026-11-18 15:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Tender",
