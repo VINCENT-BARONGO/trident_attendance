@@ -32,46 +32,13 @@ def after_install():
 	ensure_standard_perms()
 	adopt_site_id_field()
 	ensure_casual_approval()
-	ensure_certificate_field()
 
 
 def after_migrate():
 	ensure_standard_perms()
 	ensure_casual_approval()
-	ensure_certificate_field()
 
 
-# ---------------------------------------------------------------------------
-# Payment certificates: the link on the Sales Invoice
-# ---------------------------------------------------------------------------
-# Made here and not in the Custom Field fixture: the fixture's filter takes every `custom_%` field
-# of the doctypes it names, and on the production sites Sales Invoice carries other apps' custom
-# fields (eTIMS and so on) that an export must not adopt into this app.
-
-CERTIFICATE_FIELD = {
-	"fieldname": "custom_payment_certificate",
-	"label": "Payment Certificate",
-	"fieldtype": "Link",
-	"options": "Payment Certificate",
-	"insert_after": "project",
-	"depends_on": "eval:doc.project",
-	"no_copy": 1,
-	"search_index": 1,
-	"description": "For a project valuation: the client's payment certificate this invoice is raised for. "
-	"Submitting the invoice records its date on the certificate.",
-}
-
-
-def ensure_certificate_field():
-	"""Sales Invoice > Payment Certificate, when missing. Returns True when it added the field."""
-	if not frappe.db.exists("DocType", "Payment Certificate") or not frappe.db.exists("DocType", "Sales Invoice"):
-		return False
-	if frappe.get_meta("Sales Invoice").has_field(CERTIFICATE_FIELD["fieldname"]):
-		return False
-	from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-
-	create_custom_fields({"Sales Invoice": [CERTIFICATE_FIELD]}, update=False)
-	return True
 
 
 # ---------------------------------------------------------------------------

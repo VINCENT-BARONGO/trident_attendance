@@ -30,7 +30,7 @@
   "amount_approved",
   "rejected",
   "column_break_3",
-  "payment_certificate",
+  "valuation",
   "notes"
  ],
  "fields": [
@@ -172,11 +172,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "payment_certificate",
+   "fieldname": "valuation",
    "fieldtype": "Link",
    "label": "Claimed On Valuation",
-   "options": "Payment Certificate",
-   "description": "The valuation in which the approved variation was claimed."
+   "options": "Delivery Note",
+   "description": "The valuation (the project's Delivery Note / certificate) the approved variation was claimed in."
   },
   {
    "fieldname": "notes",
@@ -187,7 +187,7 @@
  "index_web_pages_for_search": 0,
  "istable": 0,
  "links": [],
- "modified": "2026-11-18 15:00:00.000000",
+ "modified": "2026-11-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Project Variation",
