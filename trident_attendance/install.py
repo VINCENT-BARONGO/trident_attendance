@@ -39,8 +39,6 @@ def after_migrate():
 	ensure_casual_approval()
 
 
-
-
 # ---------------------------------------------------------------------------
 # Casual labourers: registered by one role, approved by another
 # ---------------------------------------------------------------------------
