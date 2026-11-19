@@ -46,15 +46,15 @@ class ProjectVariation(Document):
 			frappe.throw(_("Enter the amount the variation was priced at."))
 		if self.approved_on and self.amount_approved is None:
 			frappe.throw(_("Enter the amount the client approved."))
-		if self.payment_certificate:
-			project = frappe.db.get_value("Payment Certificate", self.payment_certificate, "project")
-			if project and project != self.project:
-				frappe.throw(_("Valuation {0} belongs to project {1}.").format(self.payment_certificate, project))
+		if self.valuation:
+			project = frappe.db.get_value("Delivery Note", self.valuation, "project")
+			if project != self.project:
+				frappe.throw(_("Valuation {0} belongs to project {1}.").format(self.valuation, project or "-"))
 
 	def _status(self):
 		if self.rejected:
 			return "Rejected"
-		if self.payment_certificate:
+		if self.valuation:
 			return "Invoiced"
 		if self.approved_on:
 			return "Approved"
