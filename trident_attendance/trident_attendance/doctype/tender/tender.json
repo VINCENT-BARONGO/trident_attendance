@@ -1,0 +1,310 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:TND-{YYYY}-{#####}",
+ "creation": "2026-11-18 12:00:00.000000",
+ "description": "The tender register: one record per tender prepared, with its value, closing date, submission date and result. The Contract Procurement Manager's tender KRAs (value submitted, submitted on time, value won) are read from here.",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "tender_section",
+  "tender_name",
+  "client_name",
+  "customer",
+  "tender_reference",
+  "column_break_1",
+  "tender_value",
+  "company",
+  "prepared_by",
+  "pricing_section",
+  "estimated_cost",
+  "priced_by",
+  "column_break_pricing",
+  "margin_percent",
+  "dates_section",
+  "closing_date",
+  "submitted_on",
+  "submitted_on_time",
+  "column_break_2",
+  "status",
+  "result_date",
+  "result_section",
+  "value_won",
+  "project",
+  "column_break_3",
+  "reason",
+  "documents_section",
+  "tender_document",
+  "award_letter",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "tender_section",
+   "fieldtype": "Section Break",
+   "label": "Tender"
+  },
+  {
+   "fieldname": "tender_name",
+   "fieldtype": "Data",
+   "label": "Tender / Project Name",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "client_name",
+   "fieldtype": "Data",
+   "label": "Client",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "The main contractor, developer or institution the tender goes to. Typed, because most are not customers yet."
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer",
+   "description": "Only when the client is already a customer."
+  },
+  {
+   "fieldname": "tender_reference",
+   "fieldtype": "Data",
+   "label": "Client's Tender Reference"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "tender_value",
+   "fieldtype": "Currency",
+   "label": "Tender Value",
+   "reqd": 1,
+   "in_list_view": 1,
+   "non_negative": 1,
+   "options": "Company:company:default_currency",
+   "description": "The amount tendered, before VAT."
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "fieldname": "prepared_by",
+   "fieldtype": "Link",
+   "label": "Prepared By",
+   "options": "User",
+   "in_standard_filter": 1,
+   "description": "Who the tender is counted for. Defaults to whoever records it."
+  },
+  {
+   "fieldname": "pricing_section",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "fieldname": "estimated_cost",
+   "fieldtype": "Currency",
+   "label": "Estimated Cost",
+   "non_negative": 1,
+   "options": "Company:company:default_currency",
+   "description": "What the Quantity Surveyor estimates the work will cost the company, before margin. Entered before the tender is submitted."
+  },
+  {
+   "fieldname": "priced_by",
+   "fieldtype": "Link",
+   "label": "Priced By",
+   "options": "User",
+   "description": "Who prepared the cost estimate."
+  },
+  {
+   "fieldname": "column_break_pricing",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "margin_percent",
+   "fieldtype": "Percent",
+   "label": "Margin on Tender Value",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dates_section",
+   "fieldtype": "Section Break",
+   "label": "Dates"
+  },
+  {
+   "fieldname": "closing_date",
+   "fieldtype": "Date",
+   "label": "Closing Date",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "The client's deadline for submission."
+  },
+  {
+   "fieldname": "submitted_on",
+   "fieldtype": "Date",
+   "label": "Submitted On",
+   "description": "The day the tender was handed in or sent. Cannot be in the future."
+  },
+  {
+   "fieldname": "submitted_on_time",
+   "fieldtype": "Check",
+   "label": "Submitted On Time",
+   "read_only": 1,
+   "description": "Ticked by the system when Submitted On is on or before the Closing Date."
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Preparing\nSubmitted\nWon\nLost\nNot Submitted\nCancelled",
+   "default": "Preparing",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "result_date",
+   "fieldtype": "Date",
+   "label": "Result Date",
+   "depends_on": "eval:in_list(['Won','Lost'], doc.status)"
+  },
+  {
+   "fieldname": "result_section",
+   "fieldtype": "Section Break",
+   "label": "Result"
+  },
+  {
+   "fieldname": "value_won",
+   "fieldtype": "Currency",
+   "label": "Value Won",
+   "non_negative": 1,
+   "options": "Company:company:default_currency",
+   "depends_on": "eval:doc.status=='Won'",
+   "description": "The awarded amount, before VAT. Defaults to the Tender Value."
+  },
+  {
+   "fieldname": "project",
+   "fieldtype": "Link",
+   "label": "Project",
+   "options": "Project",
+   "depends_on": "eval:doc.status=='Won'",
+   "description": "The project opened for the awarded work."
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason Lost / Not Submitted",
+   "depends_on": "eval:in_list(['Lost','Not Submitted','Cancelled'], doc.status)"
+  },
+  {
+   "fieldname": "documents_section",
+   "fieldtype": "Section Break",
+   "label": "Documents"
+  },
+  {
+   "fieldname": "tender_document",
+   "fieldtype": "Attach",
+   "label": "Submitted Tender"
+  },
+  {
+   "fieldname": "award_letter",
+   "fieldtype": "Attach",
+   "label": "Award Letter",
+   "depends_on": "eval:doc.status=='Won'"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 0,
+ "links": [],
+ "modified": "2026-11-18 15:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Tender",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Projects Manager",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Purchase User"
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Projects User"
+  }
+ ],
+ "search_fields": "tender_name,client_name,status",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "tender_name",
+ "track_changes": 1
+}
