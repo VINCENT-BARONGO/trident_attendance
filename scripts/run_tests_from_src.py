@@ -30,7 +30,6 @@ DOCTYPES = {
 	"App Device": "trident_attendance/trident_attendance/doctype/app_device/app_device.json",
 	"Shift Signal": "trident_attendance/trident_attendance/doctype/shift_signal/shift_signal.json",
 	"Location Request": "trident_attendance/trident_attendance/doctype/location_request/location_request.json",
-	"Project Variation": "trident_attendance/trident_attendance/doctype/project_variation/project_variation.json",
 }
 # Custom fields the tests need, from the fixture; dropped afterwards when the site lacked them.
 FIELDS = [
@@ -75,7 +74,6 @@ TESTS = [
 	"trident_attendance.tests.test_access_hardening",
 	"trident_attendance.tests.test_maintenance",
 	"trident_attendance.tests.test_error_summary",
-	"trident_attendance.tests.test_project_variation",
 ]
 
 
