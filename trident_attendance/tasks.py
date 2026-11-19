@@ -385,6 +385,8 @@ def mark_day(logs: list, day, settings=None, day_reasons=None, instant=None) -> 
 				"custom_project": project,
 				"custom_mixed_projects": 1 if len(projects) > 1 else 0,
 				"half_day_status": "Absent" if status == "Half Day" else None,
+				# A night shift's own shift, late entry and early exit (work_day.night_marks).
+				**work_day.night_marks(logs[0].employee, day, in_time, out_time),
 			}
 		)
 		attendance.flags.ignore_permissions = True

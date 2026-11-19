@@ -43,7 +43,9 @@ def assignment_on(employee: str, day):
 	rows = frappe.db.sql(
 		"""select sa.name, sa.shift_type, st.start_time, st.end_time,
 			st.begin_check_in_before_shift_start_time as before_min,
-			st.allow_check_out_after_shift_end_time as after_min
+			st.allow_check_out_after_shift_end_time as after_min,
+			st.enable_late_entry_marking as late_marking, st.late_entry_grace_period as late_grace,
+			st.enable_early_exit_marking as early_marking, st.early_exit_grace_period as early_grace
 		from `tabShift Assignment` sa join `tabShift Type` st on st.name = sa.shift_type
 		where sa.employee = %(employee)s and sa.docstatus = 1 and sa.status = 'Active'
 			and sa.start_date <= %(day)s and (sa.end_date is null or sa.end_date >= %(day)s)
@@ -118,3 +120,24 @@ def is_complete(employee: str, day, now=None) -> bool:
 	if not night:
 		return True
 	return get_datetime(now or now_datetime()) > night_bounds(night, day)[1]
+
+
+def night_marks(employee: str, day, in_time, out_time) -> dict:
+	"""Attendance fields for a night shift that starts on `day`: the shift, and late entry / early
+	exit by the Shift Type's own switches and grace minutes (HRMS's fields). Empty for any day that
+	is not a night, so day shifts are marked exactly as before.
+
+	A night crew that clocks out at 05:10 on a 19:00-07:00 shift is an early exit; without this the
+	day came out as plain Present with no mark (Astral, Nov 2026)."""
+	row = night_on(employee, day)
+	if not row:
+		return {}
+	day = getdate(day)
+	start = combine_datetime(day, row.start_time)
+	end = combine_datetime(add_days(day, 1), row.end_time)
+	out = {"shift": row.shift_type, "late_entry": 0, "early_exit": 0}
+	if in_time and cint(row.get("late_marking")):
+		out["late_entry"] = 1 if get_datetime(in_time) > start + timedelta(minutes=cint(row.get("late_grace"))) else 0
+	if out_time and cint(row.get("early_marking")):
+		out["early_exit"] = 1 if get_datetime(out_time) < end - timedelta(minutes=cint(row.get("early_grace"))) else 0
+	return out

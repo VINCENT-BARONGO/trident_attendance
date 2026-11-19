@@ -262,6 +262,51 @@ class TestNightWorkDay(ShiftCase):
 		)
 		self.assertEqual([(getdate(r.attendance_date), round(r.working_hours, 1), r.status) for r in rows], [(n, 12.0, "Present")])
 
+	def _mark(self, start, end):
+		punch(self.employee, "IN", get_datetime(start))
+		punch(self.employee, "OUT", get_datetime(end))
+		summary = {"days": 0, "marked": 0, "held": 0, "errors": 0, "results": []}
+		tasks._finalise_days(tasks.get_settings(), add_days(self.night, 1), summary, commit_each=False)
+		rows = frappe.get_all(
+			"Attendance",
+			filters={"employee": self.employee, "docstatus": 1},
+			fields=["attendance_date", "shift", "late_entry", "early_exit", "status"],
+		)
+		self.assertEqual(len(rows), 1, rows)
+		return rows[0]
+
+	def _marking(self, late=1, late_grace=10, early=1, early_grace=5):
+		fields = ("enable_late_entry_marking", "late_entry_grace_period", "enable_early_exit_marking", "early_exit_grace_period")
+		before = frappe.db.get_value("Shift Type", NIGHT, fields, as_dict=True)
+		self.addCleanup(frappe.db.set_value, "Shift Type", NIGHT, dict(before))
+		frappe.db.set_value("Shift Type", NIGHT, dict(zip(fields, (late, late_grace, early, early_grace))))
+		work_day.clear_cache()
+
+	def test_a_night_left_two_hours_early_is_an_early_exit(self):
+		self._marking()
+		n = self.night
+		row = self._mark(f"{n} 19:05:00", f"{add_days(n, 1)} 05:10:00")
+		self.assertEqual((getdate(row.attendance_date), row.shift, row.late_entry, row.early_exit), (n, NIGHT, 0, 1))
+
+	def test_a_late_start_is_a_late_entry_and_a_full_night_is_no_early_exit(self):
+		self._marking()
+		n = self.night
+		row = self._mark(f"{n} 19:40:00", f"{add_days(n, 1)} 06:57:00")
+		self.assertEqual((row.shift, row.late_entry, row.early_exit), (NIGHT, 1, 0), "06:57 is inside the 5-minute grace")
+
+	def test_with_marking_switched_off_the_night_only_carries_its_shift(self):
+		self._marking(late=0, early=0)
+		n = self.night
+		row = self._mark(f"{n} 19:40:00", f"{add_days(n, 1)} 05:10:00")
+		self.assertEqual((row.shift, row.late_entry, row.early_exit), (NIGHT, 0, 0))
+
+	def test_a_day_without_a_night_is_marked_as_before(self):
+		self._marking()
+		d = add_days(self.night, 1)  # the night assignment is for one date only
+		punch(self.employee, "IN", get_datetime(f"{d} 09:30:00"))
+		punch(self.employee, "OUT", get_datetime(f"{d} 15:00:00"))
+		self.assertEqual(work_day.night_marks(self.employee, d, get_datetime(f"{d} 09:30:00"), get_datetime(f"{d} 15:00:00")), {})
+
 	def test_without_a_shift_the_same_punches_are_two_broken_days(self):
 		frappe.db.delete("Shift Assignment", {"employee": self.employee})
 		work_day.clear_cache()
