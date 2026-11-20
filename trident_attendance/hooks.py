@@ -56,7 +56,7 @@ fixtures = [
 # Form scripts for other apps' doctypes
 # ---------------------------------------------------------------------------
 
-doctype_js = {"Employee": "public/js/employee.js", "Sales Invoice": "public/js/sales_invoice.js"}
+doctype_js = {"Employee": "public/js/employee.js"}
 
 # ---------------------------------------------------------------------------
 # Controller override
@@ -113,18 +113,6 @@ doc_events = {
 	},
 	"Workflow Action": {
 		"after_insert": "trident_attendance.push_hooks.workflow_action_after_insert",
-	},
-	# A new project gets its unsigned main contract agreement, where the site asks for it (Settings >
-	# Projects), so that work started without a signed agreement shows up.
-	"Project": {
-		"after_insert": "trident_attendance.trident_attendance.doctype.project_agreement.project_agreement.on_project_insert",
-	},
-	# A project valuation's invoice names the client's Payment Certificate; submitting it stamps the
-	# invoice and its date on the certificate, which is what the invoicing KRA is scored from.
-	"Sales Invoice": {
-		"validate": "trident_attendance.trident_attendance.doctype.payment_certificate.payment_certificate.validate_invoice",
-		"on_submit": "trident_attendance.trident_attendance.doctype.payment_certificate.payment_certificate.on_invoice_submit",
-		"on_cancel": "trident_attendance.trident_attendance.doctype.payment_certificate.payment_certificate.on_invoice_cancel",
 	},
 	# An approved casual's photo file is the approver's, like the field: not replaced, moved or deleted.
 	"File": {

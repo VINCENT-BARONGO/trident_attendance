@@ -58,9 +58,7 @@
   "column_break_locate",
   "traccar_url",
   "traccar_username",
-  "traccar_password",
-  "projects_section",
-  "track_project_agreements"
+  "traccar_password"
  ],
  "fields": [
   {
@@ -389,23 +387,12 @@
    "fieldname": "traccar_password",
    "fieldtype": "Password",
    "label": "Traccar Password or Token"
-  },
-  {
-   "fieldname": "projects_section",
-   "fieldtype": "Section Break",
-   "label": "Projects"
-  },
-  {
-   "fieldname": "track_project_agreements",
-   "fieldtype": "Check",
-   "label": "Make an agreement record for every new project",
-   "description": "When ticked, a Project Agreement (Main Contract, not signed) is made for each new project, so that a project started without a signed agreement shows up. Leave off on a site that does not contract project by project."
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-18 15:00:00.000000",
+ "modified": "2026-11-19 16:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",
