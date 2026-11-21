@@ -1,0 +1,173 @@
+{
+ "actions": [],
+ "autoname": "format:LTR-{YYYY}-{#####}",
+ "creation": "2026-11-21 12:00:00.000000",
+ "description": "HR letters in the employee app (My HR > Letters): a copy of each email sent from an Employee record or an Official Letter addressed to an employee, and letters sent with Employee > Send to app. The employee reads them in the app; this shows when they first opened each one. Rows are made by the app itself and cannot be created or changed by hand.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "employee",
+  "employee_name",
+  "subject",
+  "column_break_sent",
+  "source",
+  "sent_by",
+  "sent_at",
+  "communication",
+  "section_break_app",
+  "phones_notified",
+  "column_break_app",
+  "opened_at",
+  "last_opened_at",
+  "times_opened",
+  "section_break_message",
+  "message"
+ ],
+ "fields": [
+  {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "reqd": 1,
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "employee_name",
+   "fieldtype": "Data",
+   "label": "Employee Name",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Data",
+   "label": "Subject",
+   "read_only": 1,
+   "in_list_view": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_sent",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "label": "Came From",
+   "options": "Email\nSent to app\nOfficial Letter",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "sent_by",
+   "fieldtype": "Link",
+   "label": "Sent By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sent_at",
+   "fieldtype": "Datetime",
+   "label": "Sent At",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "communication",
+   "fieldtype": "Link",
+   "label": "Email",
+   "options": "Communication",
+   "read_only": 1,
+   "search_index": 1,
+   "description": "The email this letter is a copy of. One letter per email and employee."
+  },
+  {
+   "fieldname": "section_break_app",
+   "fieldtype": "Section Break",
+   "label": "In the app"
+  },
+  {
+   "fieldname": "phones_notified",
+   "fieldtype": "Int",
+   "label": "Phones Notified",
+   "read_only": 1,
+   "description": "How many of the employee's phones were sent a notification. 0: the letter is still in My HR, but no phone was told (no app, or notifications are off)."
+  },
+  {
+   "fieldname": "column_break_app",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "opened_at",
+   "fieldtype": "Datetime",
+   "label": "First Opened In App",
+   "read_only": 1,
+   "in_list_view": 1,
+   "description": "When the employee first opened the letter in My HR. Empty: not opened yet."
+  },
+  {
+   "fieldname": "last_opened_at",
+   "fieldtype": "Datetime",
+   "label": "Last Opened In App",
+   "read_only": 1
+  },
+  {
+   "fieldname": "times_opened",
+   "fieldtype": "Int",
+   "label": "Times Opened",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_message",
+   "fieldtype": "Section Break",
+   "label": "Letter"
+  },
+  {
+   "fieldname": "message",
+   "fieldtype": "Text Editor",
+   "label": "Message",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-11-21 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Trident Attendance",
+ "name": "Employee App Letter",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "role": "System Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "role": "HR Manager"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "print": 1,
+   "role": "HR User"
+  }
+ ],
+ "sort_field": "sent_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "subject",
+ "track_changes": 0
+}
