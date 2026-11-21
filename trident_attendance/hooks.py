@@ -120,6 +120,11 @@ doc_events = {
 	"Workflow Action": {
 		"after_insert": "trident_attendance.push_hooks.workflow_action_after_insert",
 	},
+	# An email sent from an Employee record or an Official Letter also reaches the person's app
+	# (My HR > Letters). Queued after the commit; it never holds up the email.
+	"Communication": {
+		"after_insert": "trident_attendance.letters.communication_after_insert",
+	},
 	# An approved casual's photo file is the approver's, like the field: not replaced, moved or deleted.
 	"File": {
 		"before_insert": "trident_attendance.trident_attendance.doctype.casual_labourer.casual_labourer.file_before_insert",
