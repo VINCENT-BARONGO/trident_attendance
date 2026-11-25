@@ -1095,4 +1095,8 @@ class TestNotifyFromApp(PushCase):
 		self.assertRefused(push.notify_from_app(self.user_a, "x", "y", "//evil.example/"), "bad_url")
 		self.assertRefused(push.notify_from_app(self.user_a, "", "y"), "no_text")
 		self.assertRefused(push.notify_from_app("nobody@example.com", "x", "y"), "no_user")
+		self.assertRefused(push.notify_from_app({"name": ["like", "%"]}, "x", "y"), "no_text")    # a filter, not a user
+		for bad in ("/" + chr(92) + "evil.example", "/duties/" + chr(92) + "x", "javascript:alert(1)", "/other/",
+					"/duties/" + chr(10) + "x", "//evil.example", "/duties/ x"):
+			self.assertRefused(push.notify_from_app(self.user_a, "x", "y", bad), "bad_url")
 		self.assertEqual(self.posted, [])

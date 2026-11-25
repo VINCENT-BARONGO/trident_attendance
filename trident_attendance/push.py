@@ -19,6 +19,7 @@ values, which in these functions include the key.
 import functools
 import hashlib
 import json
+import re
 import traceback
 from datetime import datetime, timezone
 from urllib.parse import quote
@@ -42,6 +43,9 @@ KINDS = ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "
 APP_SENDER_ROLE = "App Notifier"
 APP_TITLE_MAX = 80
 APP_BODY_MAX = 300
+# A path on the web app's own pages: nothing a browser could read as another site (no "//", backslash,
+# scheme, space or control character).
+APP_URL = re.compile(r"^/(?:duties|helpdesk|ess)(?:/[A-Za-z0-9._~\-/?=&#]*)?$")
 ANDROID_CHANNEL = "trident_employee"
 # Seconds Firebase keeps a message for a phone it cannot reach, for the kinds that are wrong
 # when late. A "shift" that arrives hours later would start or stop the phone's reporting at
@@ -414,16 +418,21 @@ def notify_from_app(user, title, body, url="/duties/"):
 	person has none registered (the web app then falls back to SMS)."""
 	if APP_SENDER_ROLE not in frappe.get_roles():
 		return _refuse("not_allowed")
-	title, body, url = _text(title)[:APP_TITLE_MAX], _text(body)[:APP_BODY_MAX], _text(url) or "/duties/"
+	# Only plain strings: a dict or list here would become a database filter in notify_user (every phone).
+	if not all(isinstance(v, str) for v in (user, title, body, url)):
+		return _refuse("no_text")
+	title, body, url = _text(title)[:APP_TITLE_MAX], _text(body)[:APP_BODY_MAX], url.strip() or "/duties/"
 	if not title or not body:
 		return _refuse("no_text")
-	if not url.startswith("/") or url.startswith("//") or "://" in url:
+	if not APP_URL.fullmatch(url):
 		return _refuse("bad_url")
 	if not push_enabled():
 		return _refuse("push_disabled")
 	if not service_account():
 		return _refuse("no_service_account")
-	if not user or user == "Guest" or not frappe.db.exists("User", {"name": user, "enabled": 1}):
+	user = user.strip()
+	if not user or user == "Guest" or not frappe.db.exists("User", user) \
+			or not cint(frappe.db.get_value("User", user, "enabled")):
 		return _refuse("no_user")
 	return {"ok": True, "devices": notify_user(user, title, body, url, "duties")}
 
