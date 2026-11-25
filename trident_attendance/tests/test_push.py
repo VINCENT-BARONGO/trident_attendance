@@ -269,7 +269,7 @@ class TestSender(PushCase):
 		self.assertEqual(push.data_message("t", "shift", {"n": 3, "none": None}, 600)["message"]["data"], {"n": "3", "none": "", "kind": "shift"})
 
 	def test_the_kinds(self):
-		self.assertEqual(push.KINDS, ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "clock"))
+		self.assertEqual(push.KINDS, ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "clock", "duties"))
 		self.assertEqual((push.SHIFT_TTL, push.LOCATE_TTL), (600, 120))
 
 	def test_an_older_kind_is_queued_and_sent_as_before(self):
