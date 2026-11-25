@@ -35,7 +35,13 @@ PLATFORMS = ("android", "ios")
 TOKEN_MIN_LENGTH = 20
 TOKEN_MAX_LENGTH = 512
 
-KINDS = ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "clock")
+KINDS = ("announcement", "leave", "payslip", "erp", "test", "shift", "locate", "clock", "duties")
+# The web app's My Duties sends its messages (a new task, "still open", an overdue reminder) to the phones
+# through notify_from_app, signed in as its integration user, which holds this role and nothing else that
+# matters here. The phone opens `url` in the web app.
+APP_SENDER_ROLE = "App Notifier"
+APP_TITLE_MAX = 80
+APP_BODY_MAX = 300
 ANDROID_CHANNEL = "trident_employee"
 # Seconds Firebase keeps a message for a phone it cannot reach, for the kinds that are wrong
 # when late. A "shift" that arrives hours later would start or stop the phone's reporting at
@@ -63,6 +69,10 @@ REASONS = {
 	"push_disabled": "Push notifications are switched off in Trident Attendance Settings.",
 	"no_service_account": "No Firebase service account is set up (Trident Attendance Settings, or site_config fcm_service_account).",
 	"server_error": "Something went wrong on the ERP.",
+	"not_allowed": "Only a login with the App Notifier role may send this.",
+	"no_user": "There is no such user.",
+	"bad_url": "url must be a path in the web app, starting with a single /.",
+	"no_text": "A title and a message are needed.",
 }
 
 
@@ -394,6 +404,28 @@ def enabled_devices(user: str | None) -> int:
 def notify_all(title: str, body: str, url: str, kind: str) -> int:
 	"""Queues the message for every enabled device on the site."""
 	return _notify({}, title, body, url, kind)
+
+
+@frappe.whitelist(methods=["POST"])
+@_keeps_the_key_out_of_the_error_log
+def notify_from_app(user, title, body, url="/duties/"):
+	"""One message from the web app (My Duties) to one person's phones, through the employee app.
+	Only for a login holding APP_SENDER_ROLE. `devices` is how many phones it was queued for: 0 when the
+	person has none registered (the web app then falls back to SMS)."""
+	if APP_SENDER_ROLE not in frappe.get_roles():
+		return _refuse("not_allowed")
+	title, body, url = _text(title)[:APP_TITLE_MAX], _text(body)[:APP_BODY_MAX], _text(url) or "/duties/"
+	if not title or not body:
+		return _refuse("no_text")
+	if not url.startswith("/") or url.startswith("//") or "://" in url:
+		return _refuse("bad_url")
+	if not push_enabled():
+		return _refuse("push_disabled")
+	if not service_account():
+		return _refuse("no_service_account")
+	if not user or user == "Guest" or not frappe.db.exists("User", {"name": user, "enabled": 1}):
+		return _refuse("no_user")
+	return {"ok": True, "devices": notify_user(user, title, body, url, "duties")}
 
 
 @frappe.whitelist(methods=["POST"])

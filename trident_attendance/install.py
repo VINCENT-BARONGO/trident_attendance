@@ -37,6 +37,15 @@ def after_install():
 def after_migrate():
 	ensure_standard_perms()
 	ensure_casual_approval()
+	ensure_app_notifier()
+
+
+def ensure_app_notifier():
+	"""The role the web app's integration user holds to send to phones (push.notify_from_app)."""
+	from trident_attendance.push import APP_SENDER_ROLE
+
+	if not frappe.db.exists("Role", APP_SENDER_ROLE):
+		frappe.get_doc({"doctype": "Role", "role_name": APP_SENDER_ROLE, "desk_access": 0}).insert(ignore_permissions=True)
 
 
 # ---------------------------------------------------------------------------

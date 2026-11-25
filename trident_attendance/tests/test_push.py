@@ -1063,3 +1063,36 @@ class TestWaitingForSomeone(TriggerCase):
 			self.bell()
 		self.assertEqual(len(self.errors_logged), 1)
 		self.assertIn("trident_attendance: push on Notification Log failed", self.errors_logged[0])
+
+
+class TestNotifyFromApp(PushCase):
+	"""The web app's My Duties sends through push.notify_from_app, only as a login with App Notifier."""
+
+	def setUp(self):
+		super().setUp()
+		from trident_attendance.install import ensure_app_notifier
+
+		ensure_app_notifier()
+		self.sender = helpers.make_user("app-notifier@example.com", roles=(push.APP_SENDER_ROLE,))
+		self.sender = getattr(self.sender, "name", self.sender)
+
+	def test_sends_to_the_persons_phones_and_opens_the_page(self):
+		self.register(self.user_a, TOKEN_A)
+		frappe.set_user(self.sender)
+		with self.enqueued() as queue:
+			self.assertEqual(push.notify_from_app(self.user_a, "New task: Fix the gate", "Due Fri 17:00", "/duties/"),
+							 {"ok": True, "devices": 1})
+			queue.run()
+		self.assertEqual([p.payload["message"]["token"] for p in self.posted], [TOKEN_A])
+		self.assertEqual(self.posted[0].payload["message"]["data"], {"url": "/duties/", "kind": "duties"})
+
+	def test_refusals(self):
+		self.register(self.user_a, TOKEN_A)
+		frappe.set_user(self.user_b)                                     # an ordinary user
+		self.assertRefused(push.notify_from_app(self.user_a, "x", "y"), "not_allowed")
+		frappe.set_user(self.sender)
+		self.assertRefused(push.notify_from_app(self.user_a, "x", "y", "https://evil.example/"), "bad_url")
+		self.assertRefused(push.notify_from_app(self.user_a, "x", "y", "//evil.example/"), "bad_url")
+		self.assertRefused(push.notify_from_app(self.user_a, "", "y"), "no_text")
+		self.assertRefused(push.notify_from_app("nobody@example.com", "x", "y"), "no_user")
+		self.assertEqual(self.posted, [])
