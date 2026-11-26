@@ -43,6 +43,8 @@
   "column_break_employee_access",
   "helper_token_minutes",
   "allow_face_sign_in",
+  "store_review_employee",
+  "store_review_code",
   "push_section",
   "push_enabled",
   "column_break_push",
@@ -295,6 +297,21 @@
    "label": "Allow Face Sign-in"
   },
   {
+   "description": "One made-up employee that Google Play's reviewer signs in as. When this employee asks for a sign-in code, no SMS or e-mail is sent: the code below is the code. Leave empty when no review is under way. Never a real person.",
+   "fieldname": "store_review_employee",
+   "fieldtype": "Link",
+   "label": "Store Reviewer Employee",
+   "options": "Employee"
+  },
+  {
+   "depends_on": "store_review_employee",
+   "description": "Six digits, given to Google in Play Console's App access instructions. Only for the employee above.",
+   "fieldname": "store_review_code",
+   "fieldtype": "Password",
+   "label": "Store Reviewer Code",
+   "length": 6
+  },
+  {
    "description": "The employee app's phones get a notification for a new announcement, a leave decision and a new payslip, through Firebase Cloud Messaging. Only a System Manager can change the service account. The button below sends a test to your own phones.",
    "fieldname": "push_section",
    "fieldtype": "Section Break",
@@ -392,7 +409,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-11-19 16:00:00.000000",
+ "modified": "2026-11-26 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Trident Attendance",
  "name": "Trident Attendance Settings",

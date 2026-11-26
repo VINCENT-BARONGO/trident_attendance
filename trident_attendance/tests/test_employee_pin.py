@@ -7,7 +7,7 @@ import frappe
 import requests
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
-from frappe.utils.password import check_password, rename_password
+from frappe.utils.password import check_password, rename_password, set_encrypted_password
 
 from trident_attendance import employee_contact, employee_pin
 from trident_attendance.employee_access import (
@@ -22,6 +22,7 @@ from trident_attendance.employee_contact import mask_email, mask_mobile, normali
 from trident_attendance.employee_pin import STATE_DOCTYPE, pin_problem
 from trident_attendance.tests import helpers
 from trident_attendance.tests.test_employee_access import HUB, ID_NUMBER, EmployeeAccessCase, accepted, refreshable
+from trident_attendance.utils import SETTINGS_DOCTYPE
 
 PIN = "135790"
 OTHER_PIN = "248613"
@@ -567,6 +568,58 @@ class TestBegin(PinCase):
 			self.assertRefused(self.begin("sign_in"), "too_many_codes")
 			self.assertTrue(begin_employee_sign_in("TOK90000002", "set_pin")["ok"])
 		self.assertEqual(self.sms[-1].to, "254722000111")
+
+
+class TestStoreReview(PinCase):
+	"""Google Play's reviewer: one named employee whose code is set in the settings, not sent."""
+
+	REVIEW_CODE = "482913"
+
+	def review(self, employee=None, code=REVIEW_CODE):
+		helpers.set_settings(store_review_employee=employee or self.employee)
+		set_encrypted_password(SETTINGS_DOCTYPE, SETTINGS_DOCTYPE, code, "store_review_code")
+		frappe.clear_document_cache(SETTINGS_DOCTYPE, SETTINGS_DOCTYPE)
+
+	def test_the_set_code_works_and_nothing_is_sent(self):
+		self.give_pin()
+		self.review()
+		for purpose in ("sign_in", "set_pin"):
+			result = self.begin(purpose)
+			self.assertTrue(result["ok"], result)
+			self.assertEqual(result["destination"], "the store review code")
+			self.assertNothingSent()
+			done = self.complete(self.REVIEW_CODE, purpose, new_pin=PIN if purpose == "set_pin" else None)
+			self.assertTrue(done["ok"], done)
+			self.assertEqual(accepted(done["access_token"]), self.user)
+
+	def test_needs_no_phone_or_email(self):
+		frappe.db.set_value("Employee", self.employee, {"cell_number": None, "personal_email": None, "company_email": None})
+		self.review()
+		self.assertTrue(self.begin("set_pin", None)["ok"])
+		self.assertNothingSent()
+
+	def test_still_needs_the_right_pin(self):
+		self.give_pin()
+		self.review()
+		self.assertRefused(self.begin("sign_in", "246802"), "wrong_pin")
+
+	def test_a_wrong_code_is_refused(self):
+		self.give_pin()
+		self.review()
+		self.begin()
+		self.assertRefused(self.complete("000000"), "wrong_code")
+
+	def test_other_employees_get_a_real_code(self):
+		other, _user = helpers.make_self_service_employee("Revother", id_number="TOK90000002")
+		self.give_pin()
+		self.review(employee=other.name)
+		code = self.begin_ok()
+		self.assertNotEqual(code, self.REVIEW_CODE)
+
+	def test_a_code_that_is_not_six_digits_is_ignored(self):
+		self.give_pin()
+		self.review(code="12345")
+		self.begin_ok()
 
 
 class TestComplete(PinCase):

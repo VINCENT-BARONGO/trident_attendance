@@ -15,6 +15,7 @@ off unless Trident Attendance Settings > Allow Face Sign-in is ticked.
 """
 
 import functools
+import re
 import secrets
 import string
 import traceback
@@ -441,6 +442,19 @@ def _pin_refusal(row, state, pin) -> dict | None:
 	return _refuse("wrong_pin")
 
 
+STORE_REVIEW_DESTINATION = "the store review code"
+
+
+def _store_review_code(employee) -> str | None:
+	"""The fixed code of the settings' store reviewer, when `employee` is that one and the code
+	is six digits; else None, and the code is sent as for everybody."""
+	settings = get_settings()
+	if not settings.get("store_review_employee") or settings.store_review_employee != employee:
+		return None
+	code = settings.get_password("store_review_code", raise_exception=False) or ""
+	return code if re.fullmatch(r"[0-9]{6}", code) else None
+
+
 @frappe.whitelist(methods=["POST"])
 @_keeps_secrets_out_of_the_error_log
 def begin_employee_sign_in(id_number, purpose, pin=None):
@@ -470,6 +484,19 @@ def begin_employee_sign_in(id_number, purpose, pin=None):
 		refusal = _pin_refusal(row, state, pin)
 		if refusal:
 			return refusal
+	review_code = _store_review_code(row.name)
+	if review_code:
+		# Google Play's reviewer cannot get an SMS: the code is the one set for them.
+		employee_pin.new_code(state, purpose, review_code)
+		frappe.logger("trident_attendance").info(f"Store review code set: {row.name}, {purpose}")
+		return {
+			"ok": True,
+			"employee": row.name,
+			"employee_name": row.employee_name,
+			"channel": "sms",
+			"destination": STORE_REVIEW_DESTINATION,
+			"expires_in": employee_pin.CODE_SECONDS,
+		}
 	channel, address = employee_contact.choose(row)
 	if not channel:
 		return _refuse("no_contact")
