@@ -215,11 +215,12 @@ def send_wait(state) -> int:
 	return wait
 
 
-def new_code(state, purpose) -> str:
+def new_code(state, purpose, code=None) -> str:
 	"""A fresh code for this purpose, in place of any pending one. Only its hash is kept; the
-	code itself goes to the employee and nowhere else."""
+	code itself goes to the employee and nowhere else. `code` is only for the store reviewer,
+	whose code is set in the settings instead of sent."""
 	now = now_datetime()
-	code = f"{secrets.randbelow(10**6):06d}"
+	code = code or f"{secrets.randbelow(10**6):06d}"
 	state.update(
 		{
 			"code_hash": _code_hash(state.employee, purpose, code),
