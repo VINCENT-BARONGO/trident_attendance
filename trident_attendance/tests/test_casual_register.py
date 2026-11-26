@@ -13,7 +13,7 @@ from trident_attendance import casual_register as reg
 from trident_attendance.tests import helpers
 
 DT = "Casual Labourer"
-MON = date(2026, 11, 9)  # Monday; week runs Mon 9 .. Sat 14 (Sun 15 must be excluded)
+MON = date(2026, 11, 9)  # Monday; week runs Mon 9 .. Sun 15 (Mon 16 must be excluded)
 
 
 def _day(d, h=7):
@@ -47,7 +47,8 @@ class TestCasualRegister(FrappeTestCase):
 		self._punch(self.c1, self.pa, "IN", _day(10), self.other)
 		self._punch(self.c2, self.pb, "IN", _day(9), self.coord)
 		self._punch(self.c3, self.pb, "IN", _day(9), self.other)
-		self._punch(self.c1, self.pa, "IN", _day(15), self.other)  # Sunday -> excluded
+		self._punch(self.c1, self.pa, "IN", _day(15), self.other)  # Sunday -> counts
+		self._punch(self.c1, self.pa, "IN", _day(16), self.other)  # next Monday -> excluded
 
 	def _project(self, name, allowed):
 		# Assign via the standard Project > Users table, which exists in every bench. The live site
@@ -90,12 +91,23 @@ class TestCasualRegister(FrappeTestCase):
 		data = reg.build(self.coord, MON, full=False)
 		sites = {s["project"]: s for s in data["sites"]}
 		peter = next(c for c in sites[self.pa]["casuals"] if c["name"] == self.c1)
-		self.assertEqual(peter["present"], [True, True, False, False, False, False])  # Mon/Tue, not Sun
-		self.assertEqual(peter["days"], 2)
+		self.assertEqual(peter["present"], [True, True, False, False, False, False, True])  # Mon/Tue + Sun
+		self.assertEqual(peter["days"], 3)
 		# ERPNext stores daily_rate as a float, so the Decimal may carry a trailing .0; compare by value.
 		self.assertEqual(peter["rate"], Decimal("800"))        # rate x days present
-		self.assertEqual(peter["amount"], Decimal("1600"))
+		self.assertEqual(peter["amount"], Decimal("2400"))
 		self.assertEqual(peter["phone"], "254700111222")
+
+	def test_one_day_per_person_even_across_two_sites(self):
+		# IN on one site and OUT on another the same day is one day, at the first site punched.
+		self._punch(self.c3, self.pa, "OUT", _day(9, 17), self.other)   # c3: IN on PB 07:30, OUT on PA 17:30
+		self._punch(self.c3, self.pa, "IN", _day(10), self.other)       # Tue: only on PA
+		data = reg.build(self.hr, MON, full=True)
+		rows = [(s["project"], c) for s in data["sites"] for c in s["casuals"] if c["name"] == self.c3]
+		by_site = {p: c["present"] for p, c in rows}
+		self.assertEqual(by_site[self.pb], [True, False, False, False, False, False, False])
+		self.assertEqual(by_site[self.pa], [False, True, False, False, False, False, False])
+		self.assertEqual(sum(c["days"] for _, c in rows), 2)
 
 	def test_week_parsing_defaults_and_clamps(self):
 		today = date(2026, 11, 11)
@@ -110,7 +122,7 @@ class TestCasualRegister(FrappeTestCase):
 		self.assertIn("GRAND TOTAL", html)
 		self.assertIn("KSh", html)
 		self.assertIn("Peter Test", html)
-		self.assertIn("0700111222", html)          # 2547... shown as 07...
+		self.assertIn('<td class="ph">0700111222</td>', html)   # 2547... shown as 07..., in its own column
 		self.assertIn(">P<", html)                 # a present mark is drawn
 		self.assertIn("Every site in the company.", html)   # full-scope footer
 

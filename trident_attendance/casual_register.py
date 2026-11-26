@@ -1,8 +1,9 @@
 """The weekly casual attendance & pay register, as a PDF, inside the ERP desk.
 
-The same sheet My HR downloads: for a Mon-Sat week, every casual on a site, grouped by site, with a
+The same sheet My HR downloads: for a Mon-Sun week, every casual on a site, grouped by site, with a
 day-by-day P (present) / A (absent) grid and the pay (daily rate x days present), then site and grand
-totals. A button on the Casual Attendance report calls download_weekly_register for the chosen week.
+totals. A casual counts at most once a day, at the site of their first punch that day (someone
+clocked IN on one site and OUT on another was paid twice, 26 Nov 2026). A button on the Casual Attendance report calls download_weekly_register for the chosen week.
 
 Scope matches the web-app register. HR and admins (System Manager, HR Manager, HR User, Attendance
 Admin) get every site. Anyone else (a project coordinator: Casual Registrar / Casual Approver, or
@@ -28,8 +29,8 @@ from trident_attendance import utils
 CHECKIN = "Casual Checkin"
 LABOURER = "Casual Labourer"
 PROJECT = "Project"
-WEEK_DAYS = 6  # Monday .. Saturday
-DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+WEEK_DAYS = 7  # Monday .. Sunday (Sunday work is paid like any other day, owner 26 Nov 2026)
+DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 FULL_ROLES = {"System Manager", "HR Manager", "HR User", "Attendance Admin"}
 # Everyone allowed to pull the register at all; the roles above see the whole company, the rest are
@@ -90,13 +91,13 @@ def _has_full(user: str) -> bool:
 	return bool(FULL_ROLES & set(frappe.get_roles(user)))
 
 
-def _punches(user: str, start: date, sat_end: date, *, full: bool) -> list[dict]:
-	"""Every punch in [start, sat_end) for the user's scope — any log_type, so a single clock-in
+def _punches(user: str, start: date, end: date, *, full: bool) -> list[dict]:
+	"""Every punch in [start, end) for the user's scope — any log_type, so a single clock-in
 	(even a lone OUT) marks the casual present that day. Row permissions are ignored and the scope is
 	the window AND (a site the user is assigned to OR a casual they clocked in), unless `full`. The
 	assigned sites come from utils.assigned_projects (Project > Allowed Users, or the standard
 	Project > Users), so it matches the rest of the app and works where the custom table is absent."""
-	filters = [["time", ">=", f"{start} 00:00:00"], ["time", "<", f"{sat_end} 00:00:00"]]
+	filters = [["time", ">=", f"{start} 00:00:00"], ["time", "<", f"{end} 00:00:00"]]
 	or_filters = None
 	if not full:
 		or_filters = [["supervisor_user", "=", user]]
@@ -136,21 +137,26 @@ def _project_names(names: list[str]) -> dict[str, str]:
 
 
 def build(user: str, start: date, *, full: bool) -> dict:
-	"""The register for the Mon-Sat week starting `start`. Shape mirrors the web-app register:
+	"""The register for the Mon-Sun week starting `start`. Shape mirrors the web-app register:
 	{week_start, week_end, days:[{label,date}], sites:[{project, project_name, casuals:[{full_name,
-	id_number, phone, present:[bool x6], days, rate, amount}], days, amount}], total_days,
+	id_number, phone, present:[bool x7], days, rate, amount}], days, amount}], total_days,
 	total_amount, casual_count, full}. Money is Decimal."""
 	days = [start + timedelta(days=i) for i in range(WEEK_DAYS)]
-	sat_end = start + timedelta(days=WEEK_DAYS)
-	rows = _punches(user, start, sat_end, full=full)
+	end = start + timedelta(days=WEEK_DAYS)  # exclusive: the next Monday
+	rows = _punches(user, start, end, full=full)
 
-	present: dict[tuple[str, str], set[date]] = {}
-	for r in rows:
-		project = (r.get("project") or "").strip() or "—"
+	# One day per person, at the site of their first punch that day: IN on one site and OUT on
+	# another (or punches at two sites) is one day worked, not two.
+	first_site: dict[tuple[str, date], str] = {}
+	for r in sorted(rows, key=lambda r: str(r.get("time") or "")):
 		casual = r.get("casual_labourer")
 		d = _punch_date(r.get("time"))
-		if not casual or d is None or not (start <= d < sat_end):
+		if not casual or d is None or not (start <= d < end):
 			continue
+		first_site.setdefault((casual, d), (r.get("project") or "").strip() or "—")
+
+	present: dict[tuple[str, str], set[date]] = {}
+	for (casual, d), project in first_site.items():
 		present.setdefault((project, casual), set()).add(d)
 
 	casual_names = sorted({c for _, c in present})
@@ -202,7 +208,7 @@ def build(user: str, start: date, *, full: bool) -> dict:
 
 	return {
 		"week_start": start,
-		"week_end": start + timedelta(days=WEEK_DAYS - 1),  # Saturday, for display
+		"week_end": start + timedelta(days=WEEK_DAYS - 1),  # Sunday, for display
 		"days": [{"label": DAY_LABELS[i], "date": days[i]} for i in range(WEEK_DAYS)],
 		"sites": sites,
 		"total_days": total_days,
@@ -234,25 +240,24 @@ def render_html(data: dict) -> str:
 			bits = [c["full_name"]]
 			if c.get("id_number"):
 				bits.append(str(c["id_number"]))
-			if c.get("phone"):
-				bits.append(_phone(c["phone"]))
 			who = escape("  ·  ".join(bits))
+			phone = escape(_phone(c.get("phone")))
 			cells = "".join(
 				f'<td class="d{" p" if p else ""}">{"P" if p else "A"}</td>' for p in c["present"]
 			)
 			body.append(
-				f'<tr><td class="who">{who}</td>{cells}'
+				f'<tr><td class="who">{who}</td><td class="ph">{phone}</td>{cells}'
 				f'<td class="n">{c["days"]}</td>'
 				f'<td class="n">{_money_str(c["rate"])}</td>'
 				f'<td class="n">{_money_str(c["amount"])}</td></tr>'
 			)
 		blocks.append(
-			f'<tr class="site"><td colspan="{WEEK_DAYS + 4}">{escape(label)}</td></tr>'
-			f'<tr class="head"><th class="who">Casual</th>{day_heads}'
+			f'<tr class="site"><td colspan="{WEEK_DAYS + 5}">{escape(label)}</td></tr>'
+			f'<tr class="head"><th class="who">Casual</th><th class="ph">Phone</th>{day_heads}'
 			f'<th class="n">Days</th><th class="n">Rate</th><th class="n">Amount</th></tr>'
 			+ "".join(body)
 			+ f'<tr class="total"><td class="who">{escape(label)} — total</td>'
-			f'<td colspan="{WEEK_DAYS}"></td>'
+			f'<td colspan="{WEEK_DAYS + 1}"></td>'
 			f'<td class="n">{site["days"]}</td><td></td>'
 			f'<td class="n">{_money_str(site["amount"])}</td></tr>'
 		)
@@ -264,12 +269,12 @@ def render_html(data: dict) -> str:
 	)
 	grand = (
 		f'<tr class="grand"><td class="who">GRAND TOTAL</td>'
-		f'<td colspan="{WEEK_DAYS}"></td>'
+		f'<td colspan="{WEEK_DAYS + 1}"></td>'
 		f'<td class="n">{data["total_days"]} days</td><td></td>'
 		f'<td class="n">KSh {_money_str(data["total_amount"])}</td></tr>'
 	)
 	foot = (
-		"P = present (clocked in that day), A = absent. Pay = daily rate × days present. " + scope
+		"P = present (any check-in or check-out that day; one day per person, at the first site punched), A = absent. Pay = daily rate × days present. " + scope
 	)
 	return f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 	* {{ font-family: Helvetica, Arial, sans-serif; }}
@@ -281,6 +286,7 @@ def render_html(data: dict) -> str:
 	table {{ width: 100%; border-collapse: collapse; }}
 	th, td {{ font-size: 10px; padding: 2px 4px; }}
 	th.who, td.who {{ text-align: left; }}
+	th.ph, td.ph {{ text-align: left; white-space: nowrap; }}
 	th.d, td.d, th.n, td.n {{ text-align: center; }}
 	th.n, td.n {{ text-align: right; }}
 	td.d {{ text-align: center; }}
@@ -303,7 +309,7 @@ def file_name(data: dict) -> str:
 
 @frappe.whitelist()
 def download_weekly_register(week: str | None = None):
-	"""Send the weekly register PDF for the Mon-Sat week of `week` (any date in it; default this
+	"""Send the weekly register PDF for the Mon-Sun week of `week` (any date in it; default this
 	week) as a download, scoped to the caller."""
 	user = frappe.session.user
 	if not (ALLOWED_ROLES & set(frappe.get_roles(user))):
